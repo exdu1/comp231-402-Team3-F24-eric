@@ -3,7 +3,10 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/pkg/unpack"
+	"io"
 	"log"
 	"syscall"
 	"time"
@@ -12,6 +15,7 @@ import (
 	"github.com/containerd/containerd/cio"
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/runtime-spec/specs-go"
 
 	. "github.com/comp231-402-Team3-F24/pkg/types"
@@ -318,6 +322,141 @@ func (r *ContainerdRuntime) pullImageIfNotExists(ctx context.Context, ref string
 		return nil, err
 	}
 	return image, nil
+}
+
+// PullImage pulls a container image from a registry
+func (r *ContainerdRuntime) PullImage(ctx context.Context, ref string) error {
+	ctx = namespaceContext(ctx, r.ns)
+
+	// Check if image already exists locally
+	_, err := r.client.GetImage(ctx, ref)
+	if err == nil {
+		// Image exists locally
+		return nil
+	}
+
+	// Pull the image with progress tracking
+	ongoing := make(chan struct{})
+	defer close(ongoing)
+
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Printf("Pulling image: %s\n", ref)
+			case <-ongoing:
+				return
+			}
+		}
+	}()
+
+	// Pull the image with unpack
+	_, err = r.client.Pull(ctx, ref,
+		containerd.WithPullUnpack,
+		containerd.WithPullSnapshotter("overlayfs"),
+		containerd.WithImageHandlerWrapper(func(h images.Handler) images.Handler {
+			return images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+				if desc.MediaType != images.MediaTypeDockerSchema1Manifest {
+					return h.Handle(ctx, desc)
+				}
+				return nil, fmt.Errorf("schema 1 not supported")
+			})
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", ref, err)
+	}
+
+	return nil
+}
+
+// ImportImage imports a container image from a tarball and tags it with the provided imageName.
+func (r *ContainerdRuntime) ImportImage(ctx context.Context, imageName string, reader io.Reader) error {
+	if reader == nil {
+		return fmt.Errorf("nil reader provided for image import")
+	}
+
+	ctx = namespaceContext(ctx, r.ns)
+
+	// Import the image
+	imgs, err := r.client.Import(ctx, reader)
+	if err != nil {
+		return fmt.Errorf("failed to import image: %w", err)
+	}
+
+	// Ensure at least one image was imported
+	if len(imgs) == 0 {
+		return fmt.Errorf("no images were imported")
+	}
+
+	// Use the first imported image
+	img := imgs[0]
+
+	// Unpack the image using the unpack package
+	unpacker, err := unpack.NewUnpacker(ctx, r.client.ContentStore())
+	if err != nil {
+		return fmt.Errorf("failed to create unpacker: %w", err)
+	}
+	defer func(unpacker *unpack.Unpacker) {
+		_, err := unpacker.Wait()
+		if err != nil {
+			fmt.Printf("failed to wait for unpacker: %v", err)
+		}
+	}(unpacker) // Ensure resources are released
+
+	handler := unpacker.Unpack(images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		return nil, nil
+	}))
+
+	// Dispatch the handler
+	if err := images.Dispatch(ctx, handler, nil, img.Target); err != nil {
+		return fmt.Errorf("failed to unpack image: %w", err)
+	}
+
+	// Tag the image with the provided imageName
+	// Create a new image object with the desired name that points to the same target
+	newImage := images.Image{
+		Name:   imageName,
+		Target: img.Target,
+	}
+
+	// Add the new image to the image store
+	if _, err := r.client.ImageService().Create(ctx, newImage); err != nil {
+		return fmt.Errorf("failed to tag image: %w", err)
+	}
+
+	return nil
+}
+
+// ListImages returns a list of available container images
+func (r *ContainerdRuntime) ListImages(ctx context.Context) ([]ImageInfo, error) {
+	ctx = namespaceContext(ctx, r.ns)
+
+	allImages, err := r.client.ListImages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list images: %w", err)
+	}
+
+	var imageList []ImageInfo
+	for _, img := range allImages {
+		size, err := img.Size(ctx)
+		if err != nil {
+			// Log error but continue
+			log.Printf("failed to get size for image %s: %v", img.Name(), err)
+		}
+
+		info := ImageInfo{
+			ID:        img.Name(),
+			Tags:      img.Labels(),
+			Size:      size,
+			CreatedAt: time.Time{}, // Would need additional metadata parsing to get creation time
+		}
+		imageList = append(imageList, info)
+	}
+
+	return imageList, nil
 }
 
 func (r *ContainerdRuntime) withContainerConfig(config ContainerConfig) oci.SpecOpts {

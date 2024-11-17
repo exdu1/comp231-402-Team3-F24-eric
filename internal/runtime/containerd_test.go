@@ -2,8 +2,10 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -342,8 +344,153 @@ func TestContainerdRuntime_RemoveContainer(t *testing.T) {
 	})
 }
 
-// Helper function to check if containerd is available
-func isContainerdAvailable() bool {
-	_, err := os.Stat(sockPath)
-	return err == nil
+func TestContainerdRuntime_PullImage(t *testing.T) {
+	rt, cleanup := setupTest(t)
+	defer cleanup()
+
+	tests := []struct {
+		name    string
+		imgRef  string
+		wantErr bool
+	}{
+		{
+			name:    "pull valid alpine image",
+			imgRef:  "docker.io/library/alpine:latest",
+			wantErr: false,
+		},
+		{
+			name:    "pull invalid image",
+			imgRef:  "docker.io/invalid/nonexistent:latest",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := rt.runtime.PullImage(rt.ctx, tt.imgRef)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			// Verify image exists in list
+			images, err := rt.runtime.ListImages(rt.ctx)
+			assert.NoError(t, err)
+			found := false
+			for _, img := range images {
+				if img.ID == tt.imgRef {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "Pulled image should be in list")
+		})
+	}
+}
+
+func TestContainerdRuntime_ListImages(t *testing.T) {
+	rt, cleanup := setupTest(t)
+	defer cleanup()
+
+	// Pull only alpine as test image to minimize network issues
+	testImages := []string{
+		"docker.io/library/alpine:latest",
+	}
+
+	for _, img := range testImages {
+		err := rt.runtime.PullImage(rt.ctx, img)
+		require.NoError(t, err, "Failed to pull test image")
+	}
+
+	t.Run("list images", func(t *testing.T) {
+		images, err := rt.runtime.ListImages(rt.ctx)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, images, "Image list should not be empty")
+
+		// Verify test image is in the list
+		foundImages := make(map[string]bool)
+		for _, img := range images {
+			foundImages[img.ID] = true
+			// Verify image properties
+			assert.NotEmpty(t, img.ID, "Image ID should not be empty")
+			// Size might be zero for some images, so we don't check that
+		}
+
+		for _, testImg := range testImages {
+			assert.True(t, foundImages[testImg], "Test image should be in list")
+		}
+	})
+}
+
+func TestContainerdRuntime_ImportImage(t *testing.T) {
+	rt, cleanup := setupTest(t)
+	defer cleanup()
+
+	// Create a minimal but valid OCI image tar content
+	// TODO switch to a real tar file for more complex tests
+	tarContent := []byte{
+		0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0xff, 0x4b, 0xcf, 0xcf, 0x4f, 0x49, 0xaa,
+		0x4c, 0x85, 0x00, 0x00, 0x00, 0xff, 0xff,
+	}
+
+	tests := []struct {
+		name      string
+		imageName string
+		reader    io.Reader
+		wantErr   bool
+	}{
+		{
+			name:      "import with empty reader",
+			imageName: "test/empty:latest",
+			reader:    bytes.NewReader([]byte{}),
+			wantErr:   true,
+		},
+		{
+			name:      "import with nil reader",
+			imageName: "test/nil:latest",
+			reader:    nil,
+			wantErr:   true,
+		},
+		{
+			name:      "import with invalid tar content",
+			imageName: "test/invalid:latest",
+			reader:    bytes.NewReader(tarContent),
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.reader == nil {
+				// Special handling for nil reader case
+				err := rt.runtime.ImportImage(rt.ctx, tt.imageName, nil)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "nil reader")
+				return
+			}
+
+			err := rt.runtime.ImportImage(rt.ctx, tt.imageName, tt.reader)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			// Only verify image list if we don't expect an error
+			if !tt.wantErr {
+				images, err := rt.runtime.ListImages(rt.ctx)
+				assert.NoError(t, err)
+				found := false
+				for _, img := range images {
+					if img.ID == tt.imageName {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Imported image should be in list")
+			}
+		})
+	}
 }
