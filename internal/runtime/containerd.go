@@ -3,17 +3,18 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/pkg/unpack"
+	"github.com/containerd/errdefs"
 	"io"
 	"log"
 	"syscall"
 	"time"
 
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -28,9 +29,24 @@ type ContainerdRuntime struct {
 }
 
 func NewContainerdRuntime(address, namespace string) (*ContainerdRuntime, error) {
-	client, err := containerd.New(address)
+	// Add retries for client creation
+	var client *containerd.Client
+	var err error
+	for i := 0; i < 3; i++ {
+		client, err = containerd.New(address)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to create containerd client: %w", err)
+		return nil, fmt.Errorf("failed to create containerd client after retries: %w", err)
+	}
+
+	// Ensure namespace exists
+	ctx := context.Background()
+	if err := client.NamespaceService().Create(ctx, namespace, nil); err != nil && !errdefs.IsAlreadyExists(err) {
+		return nil, fmt.Errorf("failed to create namespace: %w", err)
 	}
 
 	return &ContainerdRuntime{
@@ -41,76 +57,87 @@ func NewContainerdRuntime(address, namespace string) (*ContainerdRuntime, error)
 
 // CreateContainer creates a new container using the provided configuration
 func (r *ContainerdRuntime) CreateContainer(ctx context.Context, config ContainerConfig) error {
-	ctx = namespaceContext(ctx, r.ns)
+	ctx = namespaces.WithNamespace(ctx, r.ns)
 
-	// Check if container already exists and remove it if it does
-	if existing, err := r.client.LoadContainer(ctx, config.ID); err == nil {
-		if err := r.RemoveContainer(ctx, existing.ID()); err != nil {
-			return fmt.Errorf("failed to remove existing container: %w", err)
-		}
+	fmt.Printf("Starting container creation for %s\n", config.ID)
+
+	// Check if container already exists
+	if err := r.cleanupContainer(ctx, config.ID); err != nil {
+		fmt.Printf("Cleanup failed for %s: %v\n", config.ID, err)
+		return fmt.Errorf("failed to cleanup existing container: %w", err)
 	}
 
-	// Pull the image if it doesn't exist
+	fmt.Printf("Pulling image for %s\n", config.ID)
+	// Pull image if needed
 	image, err := r.pullImageIfNotExists(ctx, config.Image)
 	if err != nil {
+		fmt.Printf("Image pull failed for %s: %v\n", config.ID, err)
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
-	// Create container with cleanup on failure
-	container, err := r.client.NewContainer(
+	fmt.Printf("Creating container %s\n", config.ID)
+	// Create container
+	_, err = r.client.NewContainer(
 		ctx,
 		config.ID,
 		containerd.WithImage(image),
 		containerd.WithNewSnapshot(config.ID+"-snapshot", image),
 		containerd.WithNewSpec(
 			oci.WithImageConfig(image),
-			oci.WithHostNamespace(specs.NetworkNamespace),
 			r.withContainerConfig(config),
 		),
 	)
 	if err != nil {
+		fmt.Printf("Container creation failed for %s: %v\n", config.ID, err)
 		return fmt.Errorf("failed to create container: %w", err)
 	}
 
-	// Create task
-	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
-	if err != nil {
-		// Cleanup container on task creation failure
-		if cleanupErr := container.Delete(ctx, containerd.WithSnapshotCleanup); cleanupErr != nil {
-			log.Printf("failed to cleanup container after task creation failure: %v", cleanupErr)
-		}
-		return fmt.Errorf("failed to create task: %w", err)
-	}
-	println(task.ID())
-
+	fmt.Printf("Container %s created successfully\n", config.ID)
 	return nil
 }
 
-// StartContainer starts an existing container with proper state checking
+// StartContainer starts an existing container
 func (r *ContainerdRuntime) StartContainer(ctx context.Context, id string) error {
-	ctx = namespaceContext(ctx, r.ns)
+	ctx = namespaces.WithNamespace(ctx, r.ns)
 
 	container, err := r.client.LoadContainer(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
 
-	task, err := container.Task(ctx, nil)
+	// Create new task
+	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStdio))
 	if err != nil {
-		return fmt.Errorf("failed to get task: %w", err)
-	}
-
-	// Check current status before starting
-	status, err := task.Status(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get task status: %w", err)
-	}
-
-	// Only start if not already running
-	if status.Status != containerd.Running {
-		if err := task.Start(ctx); err != nil {
-			return fmt.Errorf("failed to start task: %w", err)
+		// If task exists, try to get it
+		task, err = container.Task(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create/get task: %w", err)
 		}
+	}
+
+	// Start the task
+	err = task.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start task: %w", err)
+	}
+
+	// Wait for the task to be running
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		status, err := task.Status(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get task status: %w", err)
+		}
+
+		if status.Status == containerd.Running {
+			break
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for container to start")
+		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return nil
@@ -118,30 +145,41 @@ func (r *ContainerdRuntime) StartContainer(ctx context.Context, id string) error
 
 // Helper function to cleanup a container and its resources
 func (r *ContainerdRuntime) cleanupContainer(ctx context.Context, id string) error {
+	ctx = namespaces.WithNamespace(ctx, r.ns)
+
 	container, err := r.client.LoadContainer(ctx, id)
 	if err != nil {
-		return nil // Container doesn't exist, nothing to clean up
+		// Container doesn't exist, nothing to clean up
+		return nil
 	}
 
+	// Try to get the task
 	task, err := container.Task(ctx, nil)
 	if err == nil {
-		// If task exists, force kill it
+		// Kill the task if it exists
 		_ = task.Kill(ctx, syscall.SIGKILL, containerd.WithKillAll)
-		// Wait with timeout for task to exit
-		exitCh, _ := task.Wait(ctx)
-		select {
-		case <-exitCh:
-		case <-time.After(5 * time.Second):
+
+		// Set up exit status channel
+		exitStatusC, err := task.Wait(ctx)
+		if err == nil {
+			select {
+			case <-exitStatusC:
+			case <-time.After(5 * time.Second):
+				// Timeout waiting for exit
+			}
 		}
+
+		// Delete the task
 		_, _ = task.Delete(ctx, containerd.WithProcessKill)
 	}
 
+	// Delete the container
 	return container.Delete(ctx, containerd.WithSnapshotCleanup)
 }
 
 // StopContainer stops a running container
 func (r *ContainerdRuntime) StopContainer(ctx context.Context, id string) error {
-	ctx = namespaceContext(ctx, r.ns)
+	ctx = namespaces.WithNamespace(ctx, r.ns)
 
 	container, err := r.client.LoadContainer(ctx, id)
 	if err != nil {
@@ -150,7 +188,8 @@ func (r *ContainerdRuntime) StopContainer(ctx context.Context, id string) error 
 
 	task, err := container.Task(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to get task: %w", err)
+		// If there's no task, the container is already stopped
+		return nil
 	}
 
 	status, err := task.Status(ctx)
@@ -159,110 +198,84 @@ func (r *ContainerdRuntime) StopContainer(ctx context.Context, id string) error 
 	}
 
 	if status.Status == containerd.Running {
-		// Give the container 30 seconds to stop gracefully
-		if err := task.Kill(ctx, syscall.SIGKILL, containerd.WithKillAll); err != nil {
-			return fmt.Errorf("failed to kill task: %w", err)
+		// Set up exit status channel before killing
+		exitStatusC, err := task.Wait(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to setup task wait: %w", err)
 		}
 
-		// Wait for the task to exit
-		_, err = task.Wait(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to wait for task: %w", err)
+		// Send SIGTERM
+		if err := task.Kill(ctx, syscall.SIGTERM); err != nil {
+			return fmt.Errorf("failed to send SIGTERM: %w", err)
+		}
+
+		// Wait for task to stop with timeout
+		select {
+		case <-exitStatusC:
+			break
+		case <-time.After(10 * time.Second):
+			// Force kill if timeout
+			if err := task.Kill(ctx, syscall.SIGKILL); err != nil {
+				return fmt.Errorf("failed to force kill: %w", err)
+			}
+			select {
+			case <-exitStatusC:
+				break
+			case <-time.After(5 * time.Second):
+				return fmt.Errorf("timeout waiting for container to stop")
+			}
+		}
+
+		// Delete the task
+		if _, err := task.Delete(ctx, containerd.WithProcessKill); err != nil {
+			return fmt.Errorf("failed to delete task: %w", err)
 		}
 	}
+
+	// Allow a brief moment for state changes to propagate
+	time.Sleep(500 * time.Millisecond)
 
 	return nil
 }
 
 // RemoveContainer removes a container and its associated resources
 func (r *ContainerdRuntime) RemoveContainer(ctx context.Context, id string) error {
-	ctx = namespaceContext(ctx, r.ns)
-
-	container, err := r.client.LoadContainer(ctx, id)
-	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
-	}
-
-	// First, try to get the task
-	task, err := container.Task(ctx, nil)
-	if err == nil {
-		// If task exists, check if it's running
-		status, err := task.Status(ctx)
-		if err == nil && status.Status == containerd.Running {
-			// Stop the task first
-			if err := task.Kill(ctx, syscall.SIGTERM, containerd.WithKillAll); err != nil {
-				// Log the error but continue with removal
-				log.Printf("warning: failed to kill task: %v", err)
-			}
-			// Wait for the task to exit
-			exitStatus, err := task.Wait(ctx)
-			if err == nil {
-				select {
-				case <-exitStatus:
-					// Task exited
-				case <-time.After(10 * time.Second):
-					// Force kill if it doesn't exit gracefully
-					if err := task.Kill(ctx, syscall.SIGKILL, containerd.WithKillAll); err != nil {
-						log.Printf("warning: failed to force kill task: %v", err)
-					}
-				}
-			}
-		}
-
-		// Delete the task
-		if _, err := task.Delete(ctx, containerd.WithProcessKill); err != nil {
-			log.Printf("warning: failed to delete task: %v", err)
-		}
-	}
-
-	// Delete the container
-	if err := container.Delete(ctx, containerd.WithSnapshotCleanup); err != nil {
-		return fmt.Errorf("failed to delete container: %w", err)
-	}
-
-	return nil
+	return r.cleanupContainer(ctx, id)
 }
 
 // ListContainers returns a list of all containers in the namespace
 func (r *ContainerdRuntime) ListContainers(ctx context.Context) ([]ContainerStatus, error) {
-	ctx = namespaceContext(ctx, r.ns)
+	ctx = namespaces.WithNamespace(ctx, r.ns)
 
-	allContainers, err := r.client.Containers(ctx)
+	// Get all containers
+	containers, err := r.client.Containers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
+	// Get container info for each container
 	var statuses []ContainerStatus
-
-	for _, container := range allContainers {
+	for _, container := range containers {
 		info, err := container.Info(ctx)
 		if err != nil {
-			// Log the error but continue listing other containers
-			log.Printf("warning: failed to get info for container %s: %v", container.ID(), err)
+			log.Printf("warning: failed to get container info: %v", err)
 			continue
 		}
 
+		// Get task status if it exists
 		status := ContainerStatus{
 			ID:        container.ID(),
 			CreatedAt: info.CreatedAt,
 		}
 
-		// Try to get labels including the name
-		if name, ok := info.Labels["name"]; ok {
-			status.Name = name
-		}
-
-		// Try to get the task to check running state
+		// Try to get the task
 		task, err := container.Task(ctx, nil)
 		if err == nil {
 			taskStatus, err := task.Status(ctx)
 			if err == nil {
 				status.State = string(taskStatus.Status)
-				status.FinishedAt = taskStatus.ExitTime
-				status.ExitCode = int(taskStatus.ExitStatus)
 			} else {
 				status.State = "unknown"
-				status.Error = err.Error()
 			}
 		} else {
 			status.State = "created"
@@ -276,14 +289,14 @@ func (r *ContainerdRuntime) ListContainers(ctx context.Context) ([]ContainerStat
 
 // ContainerStats returns resource usage statistics for a container
 func (r *ContainerdRuntime) ContainerStats(ctx context.Context, id string) (*ContainerStats, error) {
-	ctx = namespaceContext(ctx, r.ns)
+	ctx = namespaces.WithNamespace(ctx, r.ns)
 
 	container, err := r.client.LoadContainer(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load container: %w", err)
 	}
 
-	task, err := container.Task(ctx, nil)
+	task, err := container.Task(ctx, cio.NewAttach(cio.WithStdio))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get task: %w", err)
 	}
@@ -293,24 +306,21 @@ func (r *ContainerdRuntime) ContainerStats(ctx context.Context, id string) (*Con
 		return nil, fmt.Errorf("failed to get metrics: %w", err)
 	}
 
-	// TODO: Fix this
-	// Convert containerd metrics to our ContainerStats type
+	// Create a basic stats object
+	// TODO: Parse metrics into stats
 	stats := &ContainerStats{
-		Time: time.Now(),
+		Time:    time.Now(),
+		CPU:     CPUStats{},
+		Memory:  MemoryStats{},
+		Network: NetworkStats{},
 	}
-	//	CPU:    metrics.CPU,
-	//	Memory: metrics.Memory,
-	//	Network: NetworkStats{
-	//		RxBytes: metrics.Network.RxBytes,
-	//		TxBytes: metrics.Network.TxBytes,
-	//	},
-	//}
 
 	return stats, nil
 }
 
 // Helper functions
 
+// Helper function to pull an image if it doesn't exist
 func (r *ContainerdRuntime) pullImageIfNotExists(ctx context.Context, ref string) (containerd.Image, error) {
 	image, err := r.client.GetImage(ctx, ref)
 	if err == nil {
@@ -459,8 +469,14 @@ func (r *ContainerdRuntime) ListImages(ctx context.Context) ([]ImageInfo, error)
 	return imageList, nil
 }
 
+// Helper functions for container configuration
 func (r *ContainerdRuntime) withContainerConfig(config ContainerConfig) oci.SpecOpts {
-	return func(ctx context.Context, _ oci.Client, c *containers.Container, s *specs.Spec) error {
+	return func(ctx context.Context, client oci.Client, container *containers.Container, s *specs.Spec) error {
+		// Set command if specified
+		if len(config.Command) > 0 {
+			s.Process.Args = config.Command
+		}
+
 		// Set environment variables
 		if len(config.Environment) > 0 {
 			s.Process.Env = []string{}
@@ -476,33 +492,21 @@ func (r *ContainerdRuntime) withContainerConfig(config ContainerConfig) oci.Spec
 		if s.Linux.Resources == nil {
 			s.Linux.Resources = &specs.LinuxResources{}
 		}
-		if s.Linux.Resources.CPU == nil {
-			s.Linux.Resources.CPU = &specs.LinuxCPU{}
-		}
-		if s.Linux.Resources.Memory == nil {
-			s.Linux.Resources.Memory = &specs.LinuxMemory{}
-		}
 
 		if config.Resources.CPUShares > 0 {
+			if s.Linux.Resources.CPU == nil {
+				s.Linux.Resources.CPU = &specs.LinuxCPU{}
+			}
 			shares := uint64(config.Resources.CPUShares)
 			s.Linux.Resources.CPU.Shares = &shares
 		}
-		if config.Resources.CPUQuota > 0 {
-			quota := config.Resources.CPUQuota
-			s.Linux.Resources.CPU.Quota = &quota
-		}
+
 		if config.Resources.MemoryMB > 0 {
+			if s.Linux.Resources.Memory == nil {
+				s.Linux.Resources.Memory = &specs.LinuxMemory{}
+			}
 			memory := int64(config.Resources.MemoryMB * 1024 * 1024)
 			s.Linux.Resources.Memory.Limit = &memory
-		}
-
-		// Set mounts
-		for _, mount := range config.Mounts {
-			s.Mounts = append(s.Mounts, specs.Mount{
-				Source:      mount.Source,
-				Destination: mount.Target,
-				Options:     r.getMountOptions(mount.ReadOnly),
-			})
 		}
 
 		return nil
@@ -523,5 +527,52 @@ func namespaceContext(ctx context.Context, namespace string) context.Context {
 
 // Close closes the containerd client connection
 func (r *ContainerdRuntime) Close() error {
-	return r.client.Close()
+	// Create a new context for closing operations
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Try one final cleanup
+	containers, err := r.ListContainers(ctx)
+	if err == nil {
+		for _, container := range containers {
+			// Use forceCleanup for final attempt
+			if err := r.forceCleanup(ctx, container.ID); err != nil {
+				// Just log errors at this point
+				log.Printf("warning: failed final cleanup of container %s: %v", container.ID, err)
+			}
+		}
+	}
+
+	// Wait a moment for cleanup to complete
+	time.Sleep(2 * time.Second)
+
+	// Close the client connection
+	if err := r.client.Close(); err != nil {
+		return fmt.Errorf("failed to close containerd client: %w", err)
+	}
+
+	return nil
+}
+
+func (r *ContainerdRuntime) forceCleanup(ctx context.Context, id string) error {
+	container, err := r.client.LoadContainer(ctx, id)
+	if err != nil {
+		return nil // Container doesn't exist
+	}
+
+	// Try to get the task
+	task, err := container.Task(ctx, nil)
+	if err == nil {
+		// Kill with SIGKILL
+		_ = task.Kill(ctx, syscall.SIGKILL, containerd.WithKillAll)
+
+		// Wait briefly for the kill to take effect
+		time.Sleep(1 * time.Second)
+
+		// Delete the task
+		_, _ = task.Delete(ctx, containerd.WithProcessKill)
+	}
+
+	// Delete container and snapshot
+	return container.Delete(ctx, containerd.WithSnapshotCleanup)
 }
