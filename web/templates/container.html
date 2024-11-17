@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Container - {{ .ContainerName }}</title> <!-- TODO: Fix hardcoding -->
+    <link rel="stylesheet" href="../static/styles.css"> <!-- TODO: Fix hardcoding -->
+    <script src="../../scripts/containerScripts.js"></script> <!-- TODO: Fix hardcoding -->
+</head>
+<body>
+<nav>
+    <ul>
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li><a href="/podName">{{ .PodName }}</a></li> <!-- TODO: Fix hardcoding -->
+        <li><a href="/container">{{ .ContainerName }}</a></li> <!-- TODO: Fix hardcoding -->
+    </ul>
+</nav>
+<main>
+    <h1>Container - {{ .ContainerName }}</h1> <!-- TODO: Fix hardcoding -->
+    <div>
+        <button id="btnStartStop" onclick="toggleStartStopContainer()">Start/Stop Container</button>
+        <button onclick="deleteContainer()">Delete Container</button>
+    </div>
+    <table>
+        <tr>
+            <td>Image</td>
+            <td>{{ .Image }}</td> <!-- TODO: Fix hardcoding -->
+            <td class="tight"><Button onclick="editField(this)">Edit</Button></td>
+        </tr>
+        <tr>
+            <td>Environment Variables</td>
+            <td>{{ .Environment }}</td> <!-- TODO: Fix hardcoding -->
+            <td class="tight"><Button onclick="editField(this)">Edit</Button></td>
+        </tr>
+        <tr>
+            <td>Ports</td>
+            <td>{{ .Ports }}</td> <!-- TODO: Fix hardcoding -->
+            <td class="tight"><Button onclick="editField(this)">Edit</Button></td>
+        </tr>
+    </table>
+    <h2>Logs</h2>
+    <table>
+        <tr>
+            <th>Time</th>
+            <th>Message</th>
+        </tr>
+        {{ range .Logs }} <!-- TODO: Fix hardcoding -->
+        <tr>
+            <td>{{ .Time }}</td>
+            <td>{{ .Message }}</td>
+        </tr>
+        {{ end }}
+    </table>
+</main>
+<script>
+    window.onload = function() {
+        checkContainerState();
+    };
+</script>
+</body>
+</html>
