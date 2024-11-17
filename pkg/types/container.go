@@ -71,3 +71,11 @@ type ContainerStatus struct {
 	ExitCode   int
 	Error      string
 }
+
+// ImageInfo represents information about a container image
+type ImageInfo struct {
+	ID        string
+	Tags      map[string]string
+	Size      int64
+	CreatedAt time.Time
+}
