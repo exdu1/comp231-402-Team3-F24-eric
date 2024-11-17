@@ -17,11 +17,7 @@ A lightweight container orchestration platform designed for small and medium bus
 ```bash
 # Install required packages
 sudo apt-get update
-sudo apt-get install -y containerd.io
-
-# Create default configuration
-sudo mkdir -p /etc/containerd
-containerd config default | sudo tee /etc/containerd/config.toml
+sudo apt-get install containerd
 
 # Start containerd service
 sudo systemctl restart containerd
@@ -29,6 +25,7 @@ sudo systemctl enable containerd
 ```
 
 2. **Clone the repository**:
+Get an access token: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
 ```bash
 git clone https://github.com/Mindful-Developer/comp231-402-Team3-F24.git
 cd comp231-402-Team3-F24
@@ -37,6 +34,16 @@ cd comp231-402-Team3-F24
 3. **Install dependencies**:
 ```bash
 go mod download
+```
+
+4. **Install Brew and Go**
+```bash
+test -d ~/.linuxbrew && eval "$(~/.linuxbrew/bin/brew shellenv)"
+test -d /home/linuxbrew/.linuxbrew && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+echo "eval \"\$($(brew --prefix)/bin/brew shellenv)\"" >> ~/.bashrc
+```
+```bash
+brew install go
 ```
 
 ### Configuration
