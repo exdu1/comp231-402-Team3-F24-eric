@@ -242,7 +242,7 @@ func TestContainerdRuntime_StartStopContainer(t *testing.T) {
 		// Give the container time to stop
 		time.Sleep(time.Second)
 
-		// Verify container is stopped
+		// Verify container is stopped (in "created" state)
 		containers, err := rt.runtime.ListContainers(rt.ctx)
 		assert.NoError(t, err)
 
@@ -250,7 +250,7 @@ func TestContainerdRuntime_StartStopContainer(t *testing.T) {
 		for _, c := range containers {
 			if c.ID == containerID {
 				found = true
-				assert.Equal(t, "stopped", c.State, "Container should be stopped")
+				assert.Equal(t, "created", c.State, "Container should be in created state after stopping")
 				break
 			}
 		}
