@@ -24,19 +24,7 @@ sudo systemctl restart containerd
 sudo systemctl enable containerd
 ```
 
-2. **Clone the repository**:
-Get an access token: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
-```bash
-git clone https://github.com/Mindful-Developer/comp231-402-Team3-F24.git
-cd comp231-402-Team3-F24
-```
-
-3. **Install dependencies**:
-```bash
-go mod download
-```
-
-4. **Install Brew and Go**
+2. **Install Brew and Go**
 ```bash
 test -d ~/.linuxbrew && eval "$(~/.linuxbrew/bin/brew shellenv)"
 test -d /home/linuxbrew/.linuxbrew && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
@@ -44,6 +32,21 @@ echo "eval \"\$($(brew --prefix)/bin/brew shellenv)\"" >> ~/.bashrc
 ```
 ```bash
 brew install go
+```
+
+3. **Clone the repository**:
+Make sure to use classic GitHub token: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic
+
+```bash
+brew install gh
+gh auth login --with-token < "token_here"
+gh repo clone Mindful-Developer/comp231-402-Team3-F24
+cd comp231-402-Team3-F24
+```
+
+4. **Install dependencies**:
+```bash
+go mod download
 ```
 
 ### Configuration
