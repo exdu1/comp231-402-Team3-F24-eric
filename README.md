@@ -68,7 +68,7 @@ sudo chmod 660 /run/containerd/containerd.sock
 
 ```bash
 # Run all tests
-sudo $(which go) test ./...
+sudo $(which go) test ./... -v
 
 # Run specific test package
 sudo $(which go) test ./internal/runtime -v
