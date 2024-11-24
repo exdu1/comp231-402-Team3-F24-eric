@@ -58,6 +58,9 @@ type PodStatus struct {
 
 	// Conditions represent the latest available observations of a pod's state
 	Conditions []PodCondition `json:"conditions,omitempty"`
+
+	// Pod error messages
+	ErrPodNotFound error
 }
 
 // PodPhase represents the current lifecycle phase of a pod
