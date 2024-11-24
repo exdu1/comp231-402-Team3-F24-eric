@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Create Container</title>
+    <link rel="stylesheet" href="../static/styles.css">
+    <script src="../../scripts/podScripts.js" defer></script>
+</head>
+<body>
+<nav>
+    <ul>
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li><a href="/podName">{{ .PodName }}</a></li>
+    </ul>
+</nav>
+<main>
+  <h1>Create Pod</h1>
+  <form id="podForm" action="/createPod" method="post">
+      <table>
+          <tr>
+              <td><label for="podID">Pod ID:</label></td>
+              <td><input type="text" id="podID" name="podID" required></td>
+          </tr>
+          <tr>
+              <td><label for="podName">Pod Name:</label></td>
+              <td><input type="text" id="podName" name="podName" required></td>
+          </tr>
+          <tr>
+              <td><label for="cpuShares">CPU Shares:</label></td>
+              <td><input type="number" id="cpuShares" name="cpuShares" required></td>
+          </tr>
+          <tr>
+              <td><label for="memoryMB">Memory (MB):</label></td>
+              <td><input type="number" id="memoryMB" name="memoryMB" required></td>
+          </tr>
+          <tr>
+              <td><label for="networkConfig">Network Configuration:</label></td>
+              <td><input type="text" id="networkConfig" name="networkConfig"></td>
+          </tr>
+          <tr>
+              <td><label for="volumes">Volumes:</label></td>
+              <td><input type="text" id="volumes" name="volumes"></td>
+          </tr>
+          <tr>
+              <td><label for="environment">Environment Variables:</label></td>
+              <td>
+                  <div class="env-vars">
+                      <div class="env-var-entry">
+                          <input type="text" name="env_key[]" placeholder="KEY">
+                          <input type="text" name="env_value[]" placeholder="VALUE">
+                          <button type="button" class="add-env-var">+</button>
+                      </div>
+                  </div>
+              </td>
+          </tr>
+          <tr>
+              <td><label for="restartPolicy">Restart Policy:</label></td>
+              <td><input type="text" id="restartPolicy" name="restartPolicy"></td>
+          </tr>
+          <tr>
+              <td><label for="labels">Labels:</label></td>
+              <td><input type="text" id="labels" name="labels"></td>
+          </tr>
+      </table>
+      <button type="submit">Create Pod</button>
+  </form>
+  </main> 
