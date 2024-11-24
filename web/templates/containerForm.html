@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Create Container</title>
-    <link rel="stylesheet" href="../static/styles.css"> <!-- Assuming the same stylesheet is used -->
+    <link rel="stylesheet" href="../static/containerForm.css"> <!-- Assuming the same stylesheet is used -->
     <script src="../../scripts/containerForm.js" defer></script> <!-- JavaScript for form handling -->
 </head>
 <body>
@@ -16,36 +16,52 @@
 </nav>
 <main>
 <h1>Create Container</h1>
-  <form action="/createContainer" method="post"> <!-- TODO: Implement container createtion-->
-      <table>
-        <tr>
+<form id="containerForm" action="/createContainer" method="post" enctype="multipart/form-data">
+  <table>
+      <tr>
+          <td><label for="containerID">Container ID:</label></td>
+          <td><input type="text" id="containerID" name="containerID" required></td>
+      </tr>
+      <tr>
           <td><label for="containerName">Container Name:</label></td>
           <td><input type="text" id="containerName" name="containerName" required></td>
-        </tr>
-        <tr>
+      </tr>
+      <tr>
           <td><label for="creationOption">Creation Option:</label></td>
           <td>
-            <input type="radio" id="useImage" name="creationOption" value="useImage" checked>
-            <label for="useImage">Use Image File</label>
-            <input type="radio" id="noImage" name="creationOption" value="noImage">
-            <label for="noImage">No Image File</label>
+              <input type="radio" id="useImage" name="creationOption" value="useImage" checked>
+              <label for="useImage">Use Image File</label>
+              <input type="radio" id="noImage" name="creationOption" value="noImage">
+              <label for="noImage">No Image File</label>
           </td>
-        </tr>
-        <tr id="imageRow">
+      </tr>
+      <tr id="imageRow">
           <td><label for="image">Image:</label></td>
-          <td><input type="text" id="image" name="image" required></td>
-        </tr>
-        <tr>
+          <td><input type="file" id="image" name="image" required></td>
+      </tr>
+      <tr>
+          <td><label for="cpuShares">CPU Shares:</label></td>
+          <td><input type="number" id="cpuShares" name="cpuShares" required></td>
+      </tr>
+      <tr>
+          <td><label for="memoryMB">Memory (MB):</label></td>
+          <td><input type="number" id="memoryMB" name="memoryMB" required></td>
+      </tr>
+      <tr>
           <td><label for="environment">Environment Variables:</label></td>
-          <td><input type="text" id="environment" name="environment"></td>
-        </tr>
-        <tr>
-          <td><label for="ports">Ports:</label></td>
-          <td><input type="text" id="ports" name="ports"></td>
-        </tr>
-      </table>
-      <button type="submit">Create Container</button>
-  </form>
+          <td>
+              <div class="env-vars">
+                  <div class="env-var-entry">
+                      <input type="text" name="env_key[]" placeholder="KEY">
+                      <input type="text" name="env_value[]" placeholder="VALUE">
+                      <button type="button" class="add-env-var">+</button>
+                  </div>
+              </div>
+          </td>
+      </tr>
+  </table>
+  <button type="submit">Create Container</button>
+</form>
 </main>
 </body>
 </html>
