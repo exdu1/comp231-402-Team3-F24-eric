@@ -1,3 +1,9 @@
+// Package api provides the HTTP API server for managing pods and containers
+// @title LitePod API
+// @version 1.0
+// @description A lightweight container management API for running and managing containers
+// @host localhost:8080
+// @BasePath /api
 package api
 
 import (
@@ -9,9 +15,133 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/comp231-402-Team3-F24/docs"
 	"github.com/comp231-402-Team3-F24/internal/pod"
 	"github.com/comp231-402-Team3-F24/pkg/types"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
+
+// swaggerPodSpec defines the desired state of a pod for Swagger documentation
+type swaggerPodSpec struct {
+	// Unique identifier for the pod
+	ID string `json:"id"`
+	// Human-readable name for the pod
+	Name string `json:"name"`
+	// List of containers in the pod
+	Containers []swaggerContainerConfig `json:"containers"`
+	// Resource requirements/limits for the entire pod
+	Resources swaggerResources `json:"resources"`
+	// Network configuration
+	Network swaggerPodNetworkConfig `json:"network"`
+	// Volume mounts shared across containers
+	Volumes []swaggerPodVolume `json:"volumes"`
+	// Pod-wide environment variables
+	Environment map[string]string `json:"environment,omitempty"`
+	// Restart policy for containers in the pod
+	RestartPolicy string `json:"restartPolicy"`
+	// Labels for pod metadata
+	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// swaggerContainerConfig represents container configuration for Swagger documentation
+type swaggerContainerConfig struct {
+	// Container name
+	Name string `json:"name"`
+	// Container image
+	Image string `json:"image"`
+	// Command to run
+	Command []string `json:"command,omitempty"`
+	// Environment variables
+	Environment map[string]string `json:"environment,omitempty"`
+}
+
+// swaggerResources represents resource requirements for Swagger documentation
+type swaggerResources struct {
+	// CPU limit in cores
+	CPU float64 `json:"cpu"`
+	// Memory limit in bytes
+	Memory int64 `json:"memory"`
+}
+
+// swaggerPodNetworkConfig represents network configuration for Swagger documentation
+type swaggerPodNetworkConfig struct {
+	// Use host network
+	HostNetwork bool `json:"hostNetwork,omitempty"`
+	// DNS configuration
+	DNS swaggerPodDNSConfig `json:"dns,omitempty"`
+	// Port mappings
+	Ports []swaggerPortMapping `json:"ports,omitempty"`
+}
+
+// swaggerPodDNSConfig represents DNS configuration for Swagger documentation
+type swaggerPodDNSConfig struct {
+	// DNS nameservers
+	Nameservers []string `json:"nameservers,omitempty"`
+	// DNS search domains
+	Searches []string `json:"searches,omitempty"`
+	// DNS options
+	Options []string `json:"options,omitempty"`
+}
+
+// swaggerPortMapping represents port mapping for Swagger documentation
+type swaggerPortMapping struct {
+	// Port mapping name
+	Name string `json:"name,omitempty"`
+	// Host port
+	HostPort int32 `json:"hostPort"`
+	// Container port
+	ContainerPort int32 `json:"containerPort"`
+	// Protocol (tcp/udp)
+	Protocol string `json:"protocol,omitempty"`
+}
+
+// swaggerPodVolume represents volume configuration for Swagger documentation
+type swaggerPodVolume struct {
+	// Volume name
+	Name string `json:"name"`
+	// Host path
+	HostPath string `json:"hostPath,omitempty"`
+}
+
+// swaggerPodStatus represents the current state of a pod for Swagger documentation
+type swaggerPodStatus struct {
+	// Pod specification
+	Spec swaggerPodSpec `json:"spec"`
+	// Current phase of the pod
+	Phase string `json:"phase"`
+	// Detailed status message
+	Message string `json:"message,omitempty"`
+	// Container statuses
+	ContainerStatuses []swaggerContainerStatus `json:"containerStatuses"`
+	// Pod IP address
+	IP string `json:"ip,omitempty"`
+	// Important timestamps
+	CreatedAt  time.Time `json:"createdAt"`
+	StartedAt  time.Time `json:"startedAt,omitempty"`
+	FinishedAt time.Time `json:"finishedAt,omitempty"`
+}
+
+// swaggerContainerStatus represents container status for Swagger documentation
+type swaggerContainerStatus struct {
+	// Container ID
+	ID string `json:"id"`
+	// Container name
+	Name string `json:"name"`
+	// Container state
+	State string `json:"state"`
+	// Exit code if terminated
+	ExitCode int `json:"exitCode,omitempty"`
+	// Error message if any
+	Error string `json:"error,omitempty"`
+	// Container image
+	Image string `json:"image"`
+	// Container created timestamp
+	CreatedAt time.Time `json:"createdAt"`
+	// Container started timestamp
+	StartedAt time.Time `json:"startedAt,omitempty"`
+	// Container finished timestamp
+	FinishedAt time.Time `json:"finishedAt,omitempty"`
+}
 
 // Server represents the API server
 type Server struct {
@@ -37,10 +167,32 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.HandleFunc("/api/containers", s.handleContainers)
 	mux.HandleFunc("/api/containers/", s.handleContainer)
 
+	// Swagger documentation
+	mux.HandleFunc("/swagger/", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"), // The URL pointing to API definition
+	))
+
 	return mux
 }
 
-// handlePods handles /api/pods endpoints
+// @Summary      List all pods
+// @Description  Get a list of all pods
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   swaggerPodStatus
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods [get]
+// @Summary      Create pod
+// @Description  Create a new pod
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Param        pod  body      swaggerPodSpec  true  "Pod specification"
+// @Success      201  {object}  swaggerPodStatus
+// @Failure      400  {object}  string "Invalid request"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods [post]
 func (s *Server) handlePods(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -54,34 +206,63 @@ func (s *Server) handlePods(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handlePodRoutes handles all /api/pods/* routes
+// @Summary      Get pod details
+// @Description  Get detailed information about a specific pod
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Pod ID"
+// @Success      200  {object}  swaggerPodStatus
+// @Failure      404  {object}  string "Pod not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods/{id} [get]
+// @Summary      Update pod
+// @Description  Update an existing pod
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string        true  "Pod ID"
+// @Param        pod  body      swaggerPodSpec  true  "Updated pod specification"
+// @Success      200  {object}  swaggerPodStatus
+// @Failure      400  {object}  string "Invalid request"
+// @Failure      404  {object}  string "Pod not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods/{id} [put]
+// @Summary      Delete pod
+// @Description  Delete a specific pod
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Pod ID"
+// @Success      204  {object}  nil     "No Content"
+// @Failure      404  {object}  string "Pod not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods/{id} [delete]
 func (s *Server) handlePodRoutes(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/pods/")
-	parts := strings.Split(path, "/")
-
-	if len(parts) == 0 {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
+	// Extract pod ID from URL path
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 4 {
+		http.Error(w, "Invalid URL path", http.StatusBadRequest)
 		return
 	}
 
-	// Handle /api/pods/{id}/logs separately
-	if len(parts) >= 2 && parts[1] == "logs" {
-		s.handlePodLogs(w, r, parts[0])
-		return
-	}
-
-	// Regular pod operations
-	s.handlePod(w, r)
-}
-
-// handlePod handles /api/pods/{id} endpoints
-func (s *Server) handlePod(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/api/pods/")
+	id := parts[3]
 	if id == "" {
-		http.Error(w, "Pod ID required", http.StatusBadRequest)
+		http.Error(w, "Pod ID is required", http.StatusBadRequest)
 		return
 	}
 
+	// Handle /pods/{id}/logs separately
+	if len(parts) == 5 && parts[4] == "logs" {
+		if r.Method == http.MethodGet {
+			s.handlePodLogs(w, r, id)
+			return
+		}
+		http.Error(w, "Method not allowed for logs endpoint", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Handle /pods/{id} endpoints
 	switch r.Method {
 	case http.MethodGet:
 		s.getPod(w, r, id)
@@ -96,7 +277,62 @@ func (s *Server) handlePod(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Pod management handlers
+// @Summary      List all containers
+// @Description  Get a list of all containers across all pods
+// @Tags         containers
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   swaggerContainerStatus
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /containers [get]
+func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.listContainers(w, r)
+	case http.MethodOptions:
+		s.handleOptions(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// @Summary      Get container details
+// @Description  Get detailed information about a specific container
+// @Tags         containers
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Container ID"
+// @Success      200  {object}  swaggerContainerStatus
+// @Failure      404  {object}  string "Container not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /containers/{id} [get]
+func (s *Server) handleContainer(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/containers/")
+	if id == "" {
+		http.Error(w, "Container ID required", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		s.getContainer(w, r, id)
+	case http.MethodDelete:
+		s.deleteContainer(w, r, id)
+	case http.MethodOptions:
+		s.handleOptions(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// @Summary      List all pods
+// @Description  Get a list of all pods
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   swaggerPodStatus
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods [get]
 func (s *Server) listPods(w http.ResponseWriter, r *http.Request) {
 	pods, err := s.podManager.ListPods(r.Context())
 	if err != nil {
@@ -105,25 +341,41 @@ func (s *Server) listPods(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, pods)
+	var podStatuses []swaggerPodStatus
+	for _, pod := range pods {
+		podStatuses = append(podStatuses, convertPodStatusToSwagger(pod))
+	}
+
+	respondJSON(w, podStatuses)
 }
 
+// @Summary      Create pod
+// @Description  Create a new pod
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Param        pod  body      swaggerPodSpec  true  "Pod specification"
+// @Success      201  {object}  swaggerPodStatus
+// @Failure      400  {object}  string "Invalid request"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods [post]
 func (s *Server) createPod(w http.ResponseWriter, r *http.Request) {
-	var spec types.PodSpec
-	if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
+	var swaggerSpec swaggerPodSpec
+	if err := json.NewDecoder(r.Body).Decode(&swaggerSpec); err != nil {
 		log.Printf("Error decoding pod spec: %v", err)
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	// Validate pod spec
-	if err := validatePodSpec(&spec); err != nil {
+	if err := validatePodSpec(&swaggerSpec); err != nil {
 		log.Printf("Invalid pod spec: %v", err)
 		http.Error(w, fmt.Sprintf("Invalid pod specification: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	if err := s.podManager.CreatePod(r.Context(), spec); err != nil {
+	internalSpec := convertSwaggerPodSpecToInternal(swaggerSpec)
+	status, err := s.podManager.CreatePod(r.Context(), internalSpec)
+	if err != nil {
 		log.Printf("Error creating pod: %v", err)
 		if errors.Is(err, pod.ErrPodAlreadyExists) {
 			http.Error(w, "Pod already exists", http.StatusConflict)
@@ -134,8 +386,19 @@ func (s *Server) createPod(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+	respondJSON(w, convertPodStatusToSwagger(*status))
 }
 
+// @Summary      Get pod details
+// @Description  Get detailed information about a specific pod
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Pod ID"
+// @Success      200  {object}  swaggerPodStatus
+// @Failure      404  {object}  string "Pod not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods/{id} [get]
 func (s *Server) getPod(w http.ResponseWriter, r *http.Request, id string) {
 	retrievedPod, err := s.podManager.GetPod(r.Context(), id)
 	if err != nil {
@@ -148,25 +411,32 @@ func (s *Server) getPod(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	respondJSON(w, retrievedPod)
+	respondJSON(w, convertPodStatusToSwagger(*retrievedPod))
 }
 
+// @Summary      Update pod
+// @Description  Update an existing pod
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string        true  "Pod ID"
+// @Param        pod  body      swaggerPodSpec  true  "Updated pod specification"
+// @Success      200  {object}  swaggerPodStatus
+// @Failure      400  {object}  string "Invalid request"
+// @Failure      404  {object}  string "Pod not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods/{id} [put]
 func (s *Server) updatePod(w http.ResponseWriter, r *http.Request, id string) {
-	var spec types.PodSpec
-	if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
+	var swaggerSpec swaggerPodSpec
+	if err := json.NewDecoder(r.Body).Decode(&swaggerSpec); err != nil {
 		log.Printf("Error decoding pod spec for update: %v", err)
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	// Validate pod spec
-	if err := validatePodSpec(&spec); err != nil {
-		log.Printf("Invalid pod spec for update: %v", err)
-		http.Error(w, fmt.Sprintf("Invalid pod specification: %v", err), http.StatusBadRequest)
-		return
-	}
+	internalSpec := convertSwaggerPodSpecToInternal(swaggerSpec)
 
-	if err := s.podManager.UpdatePod(r.Context(), id, spec); err != nil {
+	if err := s.podManager.UpdatePod(r.Context(), id, internalSpec); err != nil {
 		log.Printf("Error updating pod %s: %v", id, err)
 		if errors.Is(err, pod.ErrPodNotFound) {
 			http.Error(w, "Pod not found", http.StatusNotFound)
@@ -176,9 +446,27 @@ func (s *Server) updatePod(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	// If you want to return the updated pod status, you'll need to fetch it separately
+	status, err := s.podManager.GetPod(r.Context(), id)
+	if err != nil {
+		log.Printf("Error retrieving updated pod %s: %v", id, err)
+		http.Error(w, fmt.Sprintf("Failed to retrieve updated pod: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, convertPodStatusToSwagger(*status))
 }
 
+// @Summary      Delete pod
+// @Description  Delete a specific pod
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Pod ID"
+// @Success      204  {object}  nil     "No Content"
+// @Failure      404  {object}  string "Pod not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods/{id} [delete]
 func (s *Server) deletePod(w http.ResponseWriter, r *http.Request, id string) {
 	if err := s.podManager.DeletePod(r.Context(), id); err != nil {
 		log.Printf("Error deleting pod %s: %v", id, err)
@@ -193,6 +481,16 @@ func (s *Server) deletePod(w http.ResponseWriter, r *http.Request, id string) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// @Summary      Get pod logs
+// @Description  Get logs from all containers in a pod
+// @Tags         pods
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Pod ID"
+// @Success      200  {object}  map[string]string
+// @Failure      404  {object}  string "Pod not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /pods/{id}/logs [get]
 func (s *Server) handlePodLogs(w http.ResponseWriter, r *http.Request, id string) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -232,96 +530,112 @@ func (s *Server) handlePodLogs(w http.ResponseWriter, r *http.Request, id string
 	respondJSON(w, logs)
 }
 
-// Container handlers
-func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		s.listContainers(w, r)
-	case http.MethodOptions:
-		s.handleOptions(w, r)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleContainer(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/api/containers/")
-	if id == "" {
-		http.Error(w, "Container ID required", http.StatusBadRequest)
-		return
-	}
-
-	switch r.Method {
-	case http.MethodGet:
-		s.getContainer(w, r, id)
-	case http.MethodDelete:
-		s.deleteContainer(w, r, id)
-	case http.MethodOptions:
-		s.handleOptions(w, r)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
+// @Summary      List all containers
+// @Description  Get a list of all containers across all pods
+// @Tags         containers
+// @Accept       json
+// @Produce      json
+// @Success      200  {array}   swaggerContainerStatus
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /containers [get]
 func (s *Server) listContainers(w http.ResponseWriter, r *http.Request) {
 	pods, err := s.podManager.ListPods(r.Context())
 	if err != nil {
-		log.Printf("Error listing containers: %v", err)
-		http.Error(w, fmt.Sprintf("Failed to list containers: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to list pods: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	var containers []types.ContainerStatus
-	for _, userPod := range pods {
-		containers = append(containers, userPod.ContainerStatuses...)
+	var containerStatuses []swaggerContainerStatus
+	for _, pod := range pods {
+		for _, status := range pod.ContainerStatuses {
+			containerStatuses = append(containerStatuses, convertContainerStatusToSwagger(status))
+		}
 	}
 
-	respondJSON(w, containers)
+	respondJSON(w, containerStatuses)
 }
 
+// @Summary      Get container details
+// @Description  Get detailed information about a specific container
+// @Tags         containers
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Container ID"
+// @Success      200  {object}  swaggerContainerStatus
+// @Failure      404  {object}  string "Container not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /containers/{id} [get]
 func (s *Server) getContainer(w http.ResponseWriter, r *http.Request, id string) {
 	pods, err := s.podManager.ListPods(r.Context())
 	if err != nil {
-		log.Printf("Error getting container %s: %v", id, err)
-		http.Error(w, fmt.Sprintf("Failed to get container: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to list pods: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	for _, userPod := range pods {
-		for _, container := range userPod.ContainerStatuses {
-			if container.ID == id {
-				respondJSON(w, container)
+	for _, pod := range pods {
+		for _, status := range pod.ContainerStatuses {
+			if status.ID == id {
+				respondJSON(w, convertContainerStatusToSwagger(status))
 				return
 			}
 		}
 	}
 
-	http.Error(w, "Container not found", http.StatusNotFound)
+	http.Error(w, fmt.Sprintf("Container not found: %s", id), http.StatusNotFound)
 }
 
+// @Summary      Delete container
+// @Description  Delete a specific container
+// @Tags         containers
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Container ID"
+// @Success      204  {object}  nil     "No Content"
+// @Failure      404  {object}  string "Container not found"
+// @Failure      500  {object}  string "Internal Server Error"
+// @Router       /containers/{id} [delete]
 func (s *Server) deleteContainer(w http.ResponseWriter, r *http.Request, id string) {
 	pods, err := s.podManager.ListPods(r.Context())
 	if err != nil {
-		log.Printf("Error deleting container %s: %v", id, err)
-		http.Error(w, fmt.Sprintf("Failed to delete container: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to list pods: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	for _, podStatus := range pods {
-		for _, container := range podStatus.ContainerStatuses {
+	for _, pod := range pods {
+		for _, container := range pod.ContainerStatuses {
 			if container.ID == id {
-				if err := s.podManager.DeletePod(r.Context(), podStatus.Spec.ID); err != nil {
-					log.Printf("Error deleting container %s: %v", id, err)
+				// Since containers are managed as part of pods, we need to update the pod
+				// to remove the container
+				updatedSpec := pod.Spec
+				var updatedContainers []types.ContainerConfig
+				for _, c := range updatedSpec.Containers {
+					if c.Name != container.Name {
+						updatedContainers = append(updatedContainers, types.ContainerConfig{
+							ID:          c.ID,
+							Name:        c.Name,
+							Image:       c.Image,
+							Command:     c.Command,
+							Environment: c.Environment,
+							Mounts:      c.Mounts,
+							Resources:   c.Resources,
+						})
+					}
+				}
+				updatedSpec.Containers = updatedContainers
+
+				err = s.podManager.UpdatePod(r.Context(), pod.Spec.ID, updatedSpec)
+				if err != nil {
 					http.Error(w, fmt.Sprintf("Failed to delete container: %v", err), http.StatusInternalServerError)
 					return
 				}
+
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 		}
 	}
 
-	http.Error(w, "Container not found", http.StatusNotFound)
+	http.Error(w, fmt.Sprintf("Container not found: %s", id), http.StatusNotFound)
 }
 
 // Utility functions
@@ -339,7 +653,7 @@ func respondJSON(w http.ResponseWriter, data interface{}) {
 	}
 }
 
-func validatePodSpec(spec *types.PodSpec) error {
+func validatePodSpec(spec *swaggerPodSpec) error {
 	if spec.ID == "" {
 		return fmt.Errorf("pod ID is required")
 	}
@@ -350,9 +664,6 @@ func validatePodSpec(spec *types.PodSpec) error {
 		return fmt.Errorf("at least one container is required")
 	}
 	for i, container := range spec.Containers {
-		if container.ID == "" {
-			return fmt.Errorf("container %d: ID is required", i)
-		}
 		if container.Name == "" {
 			return fmt.Errorf("container %d: name is required", i)
 		}
@@ -361,4 +672,81 @@ func validatePodSpec(spec *types.PodSpec) error {
 		}
 	}
 	return nil
+}
+
+// Convert swaggerPodSpec to types.PodSpec
+func convertSwaggerPodSpecToInternal(spec swaggerPodSpec) types.PodSpec {
+	containers := make([]types.ContainerConfig, len(spec.Containers))
+	for i, c := range spec.Containers {
+		containers[i] = types.ContainerConfig{
+			Name:        c.Name,
+			Image:       c.Image,
+			Command:     c.Command,
+			Environment: c.Environment,
+		}
+	}
+
+	return types.PodSpec{
+		ID:            spec.ID,
+		Name:          spec.Name,
+		Containers:    containers,
+		RestartPolicy: types.RestartPolicy(spec.RestartPolicy),
+		Labels:        spec.Labels,
+		Environment:   spec.Environment,
+	}
+}
+
+// Convert types.ContainerStatus to swaggerContainerStatus
+func convertContainerStatusToSwagger(status types.ContainerStatus) swaggerContainerStatus {
+	return swaggerContainerStatus{
+		ID:         status.ID,
+		Name:       status.Name,
+		State:      status.State,
+		ExitCode:   status.ExitCode,
+		Error:      status.Error,
+		CreatedAt:  status.CreatedAt,
+		StartedAt:  status.StartedAt,
+		FinishedAt: status.FinishedAt,
+	}
+}
+
+// Convert types.PodStatus to swaggerPodStatus
+func convertPodStatusToSwagger(status types.PodStatus) swaggerPodStatus {
+	containerStatuses := make([]swaggerContainerStatus, len(status.ContainerStatuses))
+	for i, cs := range status.ContainerStatuses {
+		containerStatuses[i] = convertContainerStatusToSwagger(cs)
+	}
+
+	return swaggerPodStatus{
+		Spec:              convertPodSpecToSwagger(status.Spec),
+		Phase:             string(status.Phase),
+		Message:           status.Message,
+		ContainerStatuses: containerStatuses,
+		IP:                status.IP,
+		CreatedAt:         status.CreatedAt,
+		StartedAt:         status.StartedAt,
+		FinishedAt:        status.FinishedAt,
+	}
+}
+
+// Convert types.PodSpec to swaggerPodSpec
+func convertPodSpecToSwagger(spec types.PodSpec) swaggerPodSpec {
+	containers := make([]swaggerContainerConfig, len(spec.Containers))
+	for i, c := range spec.Containers {
+		containers[i] = swaggerContainerConfig{
+			Name:        c.Name,
+			Image:       c.Image,
+			Command:     c.Command,
+			Environment: c.Environment,
+		}
+	}
+
+	return swaggerPodSpec{
+		ID:            spec.ID,
+		Name:          spec.Name,
+		Containers:    containers,
+		RestartPolicy: string(spec.RestartPolicy),
+		Labels:        spec.Labels,
+		Environment:   spec.Environment,
+	}
 }

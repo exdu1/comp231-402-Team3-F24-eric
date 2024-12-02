@@ -23,9 +23,8 @@ func main() {
 	}
 
 	defer func(rt *runtime.ContainerdRuntime) {
-		err := rt.Close()
-		if err != nil {
-
+		if err := rt.Close(); err != nil {
+			log.Printf("Failed to close runtime: %v", err)
 		}
 	}(rt)
 

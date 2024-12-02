@@ -55,6 +55,7 @@ type PodStatus struct {
 	CreatedAt  time.Time `json:"createdAt"`
 	StartedAt  time.Time `json:"startedAt,omitempty"`
 	FinishedAt time.Time `json:"finishedAt,omitempty"`
+	LastUpdate time.Time `json:"lastUpdate,omitempty"`
 
 	// Conditions represent the latest available observations of a pod's state
 	Conditions []PodCondition `json:"conditions,omitempty"`
