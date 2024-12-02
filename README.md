@@ -67,6 +67,27 @@ sudo chown root:litepod /run/containerd/containerd.sock
 sudo chmod 660 /run/containerd/containerd.sock
 ```
 
+### API Documentation (Swagger)
+
+The API documentation is available through Swagger UI. To access it:
+
+1. **Start the server**:
+```bash
+go run cmd/litepod/main.go
+```
+
+2. **Access Swagger UI**:
+Open your web browser and navigate to:
+```
+http://localhost:8080/swagger/index.html
+```
+
+This will provide you with interactive API documentation where you can:
+- View all available endpoints
+- Test API calls directly from the browser
+- See request/response schemas
+- Download the OpenAPI specification
+
 ### Running Tests
 
 ```bash
@@ -90,45 +111,4 @@ sudo systemctl status containerd
 2. **Verify socket permissions**:
 ```bash
 sudo ls -l /run/containerd/containerd.sock
-```
-
-## Project Structure:
-```bash
-litepod/
-├── cmd/
-│   └── litepod/
-│       └── main.go           # Application entry point
-├── internal/
-│   ├── api/                  # API handlers
-│   │   ├── handlers.go
-│   │   ├── middleware.go
-│   │   └── routes.go
-│   ├── container/            # Container management
-│   │   ├── container.go      # Container operations
-│   │   ├── health.go         # Health checking
-│   │   └── resource.go       # Resource monitoring
-│   ├── pod/                  # Pod management
-│   │   ├── pod.go            # Pod operations
-│   │   └── validator.go      # Pod validation
-│   ├── runtime/              # Container runtime
-│   │   ├── runtime.go        # Runtime interface
-│   │   └── containerd.go     # ContainerD implementation
-│   └── logger/               # Logging package
-│       └── logger.go
-├── pkg/                      # Public packages
-│   ├── types/                # Shared types
-│   │   ├── container.go
-│   │   └── pod.go
-│   └── metrics/              # Metrics collection
-│       └── metrics.go
-├── web/                      # Frontend assets
-│   ├── templates/
-│   └── static/
-├── configs/                  # Configuration files
-├── scripts/                  # Build and deployment scripts
-├── test/                     # Integration tests
-├── go.mod
-├── README.md
-├── LICENSE
-└── .gitignore
 ```
