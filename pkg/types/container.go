@@ -60,6 +60,26 @@ type NetworkStats struct {
 	TxPackets uint64
 }
 
+// ContainerState represents the state of a container
+type ContainerState string
+
+const (
+	// ContainerCreated means the container has been created but not started
+	ContainerCreated ContainerState = "created"
+
+	// ContainerStarting means the container is in the process of starting
+	ContainerStarting ContainerState = "starting"
+
+	// ContainerRunning means the container is currently running
+	ContainerRunning ContainerState = "running"
+
+	// ContainerStopped means the container has been stopped
+	ContainerStopped ContainerState = "stopped"
+
+	// ContainerFailed means the container failed to start or exited with an error
+	ContainerFailed ContainerState = "failed"
+)
+
 // ContainerStatus represents the current state of a container
 type ContainerStatus struct {
 	ID         string

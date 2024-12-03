@@ -3,6 +3,7 @@ package pod
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"sync"
 	"testing"
@@ -52,6 +53,11 @@ func (tc *TestCleanup) Cleanup(t *testing.T) {
 	var cleanupErrors []string
 	var errorsMu sync.Mutex
 
+	log.Printf("Pods to cleanup: %v\n", tc.pods)
+	for podID := range tc.pods {
+		log.Printf("Attempting to cleanup pod: %s\n", podID)
+	}
+
 	// Clean up each container
 	for _, container := range containers {
 		wg.Add(1)
@@ -93,6 +99,7 @@ func (tc *TestCleanup) Cleanup(t *testing.T) {
 	} else {
 		t.Log("Cleanup completed successfully")
 	}
+	log.Printf("Cleanup completed\n")
 }
 
 // cleanupContainerWithRetry attempts to clean up a container with retries
@@ -156,5 +163,185 @@ func (tc *TestCleanup) verifyAndForceCleanup(ctx context.Context) error {
 		return fmt.Errorf("force cleanup failed: %v", finalErrors)
 	}
 
+	return nil
+}
+
+// MockRuntime implements the ContainerRuntime interface for testing
+type MockRuntime struct {
+	containers         map[string]types.ContainerStatus
+	skipContainerID    string
+	stayInStartingState bool
+	failStartContainer  bool
+	failListContainers  bool
+	mu                 sync.RWMutex
+}
+
+func (m *MockRuntime) ListContainers(ctx context.Context) ([]types.ContainerStatus, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	if m.failListContainers {
+		return nil, fmt.Errorf("simulated list containers failure")
+	}
+
+	containers := make([]types.ContainerStatus, 0, len(m.containers))
+	for _, container := range m.containers {
+		if container.ID != m.skipContainerID {
+			containers = append(containers, container)
+		}
+	}
+
+	return containers, nil
+}
+
+func (m *MockRuntime) StartContainer(ctx context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	container, exists := m.containers[id]
+	if !exists {
+		return fmt.Errorf("container %s not found", id)
+	}
+
+	if m.failStartContainer {
+		return fmt.Errorf("simulated start container failure")
+	}
+
+	// Simulate a very brief startup delay
+	time.Sleep(time.Millisecond)
+
+	if m.stayInStartingState {
+		container.State = "starting"
+	} else {
+		container.State = "running"
+	}
+	m.containers[id] = container
+	return nil
+}
+
+func (m *MockRuntime) CreateContainer(ctx context.Context, config types.ContainerConfig) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// Check if container already exists
+	if _, exists := m.containers[config.ID]; exists {
+		return fmt.Errorf("container %s already exists", config.ID)
+	}
+
+	m.containers[config.ID] = types.ContainerStatus{
+		ID:    config.ID,
+		Name:  config.Name,
+		State: "created",
+	}
+	return nil
+}
+
+func (m *MockRuntime) StopContainer(ctx context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	container, exists := m.containers[id]
+	if !exists {
+		return fmt.Errorf("container %s not found", id)
+	}
+
+	// Only stop if container is running
+	if container.State != "running" && container.State != "starting" {
+		return fmt.Errorf("container %s is not running (current state: %s)", id, container.State)
+	}
+
+	// Simulate a very brief stop delay
+	time.Sleep(time.Millisecond)
+
+	container.State = "stopped"
+	m.containers[id] = container
+	return nil
+}
+
+func (m *MockRuntime) RemoveContainer(ctx context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	container, exists := m.containers[id]
+	if !exists {
+		return fmt.Errorf("container %s not found", id)
+	}
+
+	// Only remove if container is stopped
+	if container.State != "stopped" {
+		// Force stop the container first
+		container.State = "stopped"
+		m.containers[id] = container
+	}
+
+	delete(m.containers, id)
+	return nil
+}
+
+func (m *MockRuntime) DeleteContainer(ctx context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	if _, exists := m.containers[id]; !exists {
+		return fmt.Errorf("container %s not found", id)
+	}
+
+	delete(m.containers, id)
+	return nil
+}
+
+func (m *MockRuntime) ContainerStats(ctx context.Context, id string) (*types.ContainerStats, error) {
+	return nil, nil
+}
+
+func (m *MockRuntime) PullImage(ctx context.Context, ref string) error {
+	return nil
+}
+
+func (m *MockRuntime) ImportImage(ctx context.Context, imageName string, reader io.Reader) error {
+	return nil
+}
+
+func (m *MockRuntime) ListImages(ctx context.Context) ([]types.ImageInfo, error) {
+	return nil, nil
+}
+
+func (m *MockRuntime) Close() error {
 	return nil
 }

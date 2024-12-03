@@ -1,0 +1,443 @@
+basePath: /api
+definitions:
+  api.swaggerContainerConfig:
+    properties:
+      command:
+        description: Command to run
+        items:
+          type: string
+        type: array
+      environment:
+        additionalProperties:
+          type: string
+        description: Environment variables
+        type: object
+      image:
+        description: Container image
+        type: string
+      name:
+        description: Container name
+        type: string
+    type: object
+  api.swaggerContainerStatus:
+    properties:
+      createdAt:
+        description: Container created timestamp
+        type: string
+      error:
+        description: Error message if any
+        type: string
+      exitCode:
+        description: Exit code if terminated
+        type: integer
+      finishedAt:
+        description: Container finished timestamp
+        type: string
+      id:
+        description: Container ID
+        type: string
+      image:
+        description: Container image
+        type: string
+      name:
+        description: Container name
+        type: string
+      startedAt:
+        description: Container started timestamp
+        type: string
+      state:
+        description: Container state
+        type: string
+    type: object
+  api.swaggerPodDNSConfig:
+    properties:
+      nameservers:
+        description: DNS nameservers
+        items:
+          type: string
+        type: array
+      options:
+        description: DNS options
+        items:
+          type: string
+        type: array
+      searches:
+        description: DNS search domains
+        items:
+          type: string
+        type: array
+    type: object
+  api.swaggerPodNetworkConfig:
+    properties:
+      dns:
+        allOf:
+        - $ref: '#/definitions/api.swaggerPodDNSConfig'
+        description: DNS configuration
+      hostNetwork:
+        description: Use host network
+        type: boolean
+      ports:
+        description: Port mappings
+        items:
+          $ref: '#/definitions/api.swaggerPortMapping'
+        type: array
+    type: object
+  api.swaggerPodSpec:
+    properties:
+      containers:
+        description: List of containers in the pod
+        items:
+          $ref: '#/definitions/api.swaggerContainerConfig'
+        type: array
+      environment:
+        additionalProperties:
+          type: string
+        description: Pod-wide environment variables
+        type: object
+      id:
+        description: Unique identifier for the pod
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        description: Labels for pod metadata
+        type: object
+      name:
+        description: Human-readable name for the pod
+        type: string
+      network:
+        allOf:
+        - $ref: '#/definitions/api.swaggerPodNetworkConfig'
+        description: Network configuration
+      resources:
+        allOf:
+        - $ref: '#/definitions/api.swaggerResources'
+        description: Resource requirements/limits for the entire pod
+      restartPolicy:
+        description: Restart policy for containers in the pod
+        type: string
+      volumes:
+        description: Volume mounts shared across containers
+        items:
+          $ref: '#/definitions/api.swaggerPodVolume'
+        type: array
+    type: object
+  api.swaggerPodStatus:
+    properties:
+      containerStatuses:
+        description: Container statuses
+        items:
+          $ref: '#/definitions/api.swaggerContainerStatus'
+        type: array
+      createdAt:
+        description: Important timestamps
+        type: string
+      finishedAt:
+        type: string
+      ip:
+        description: Pod IP address
+        type: string
+      message:
+        description: Detailed status message
+        type: string
+      phase:
+        description: Current phase of the pod
+        type: string
+      spec:
+        allOf:
+        - $ref: '#/definitions/api.swaggerPodSpec'
+        description: Pod specification
+      startedAt:
+        type: string
+    type: object
+  api.swaggerPodVolume:
+    properties:
+      hostPath:
+        description: Host path
+        type: string
+      name:
+        description: Volume name
+        type: string
+    type: object
+  api.swaggerPortMapping:
+    properties:
+      containerPort:
+        description: Container port
+        type: integer
+      hostPort:
+        description: Host port
+        type: integer
+      name:
+        description: Port mapping name
+        type: string
+      protocol:
+        description: Protocol (tcp/udp)
+        type: string
+    type: object
+  api.swaggerResources:
+    properties:
+      cpu:
+        description: CPU limit in cores
+        type: number
+      memory:
+        description: Memory limit in bytes
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: A lightweight container management API for running and managing containers
+  title: LitePod API
+  version: "1.0"
+paths:
+  /containers:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all containers across all pods
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.swaggerContainerStatus'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: List all containers
+      tags:
+      - containers
+  /containers/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a specific container
+      parameters:
+      - description: Container ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Container not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Delete container
+      tags:
+      - containers
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about a specific container
+      parameters:
+      - description: Container ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.swaggerContainerStatus'
+        "404":
+          description: Container not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get container details
+      tags:
+      - containers
+  /pods:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all pods
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.swaggerPodStatus'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: List all pods
+      tags:
+      - pods
+    post:
+      consumes:
+      - application/json
+      description: Create a new pod
+      parameters:
+      - description: Pod specification
+        in: body
+        name: pod
+        required: true
+        schema:
+          $ref: '#/definitions/api.swaggerPodSpec'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.swaggerPodStatus'
+        "400":
+          description: Invalid request
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Create pod
+      tags:
+      - pods
+  /pods/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a specific pod
+      parameters:
+      - description: Pod ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Pod not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Delete pod
+      tags:
+      - pods
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about a specific pod
+      parameters:
+      - description: Pod ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.swaggerPodStatus'
+        "404":
+          description: Pod not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get pod details
+      tags:
+      - pods
+    put:
+      consumes:
+      - application/json
+      description: Update an existing pod
+      parameters:
+      - description: Pod ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated pod specification
+        in: body
+        name: pod
+        required: true
+        schema:
+          $ref: '#/definitions/api.swaggerPodSpec'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.swaggerPodStatus'
+        "400":
+          description: Invalid request
+          schema:
+            type: string
+        "404":
+          description: Pod not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Update pod
+      tags:
+      - pods
+  /pods/{id}/logs:
+    get:
+      consumes:
+      - application/json
+      description: Get logs from all containers in a pod
+      parameters:
+      - description: Pod ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Pod not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      summary: Get pod logs
+      tags:
+      - pods
+swagger: "2.0"

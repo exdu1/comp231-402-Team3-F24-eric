@@ -1,0 +1,661 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "A lightweight container management API for running and managing containers",
+        "title": "LitePod API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api",
+    "paths": {
+        "/containers": {
+            "get": {
+                "description": "Get a list of all containers across all pods",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "containers"
+                ],
+                "summary": "List all containers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.swaggerContainerStatus"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/containers/{id}": {
+            "get": {
+                "description": "Get detailed information about a specific container",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "containers"
+                ],
+                "summary": "Get container details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.swaggerContainerStatus"
+                        }
+                    },
+                    "404": {
+                        "description": "Container not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a specific container",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "containers"
+                ],
+                "summary": "Delete container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Container not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/pods": {
+            "get": {
+                "description": "Get a list of all pods",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pods"
+                ],
+                "summary": "List all pods",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.swaggerPodStatus"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a new pod",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pods"
+                ],
+                "summary": "Create pod",
+                "parameters": [
+                    {
+                        "description": "Pod specification",
+                        "name": "pod",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.swaggerPodSpec"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.swaggerPodStatus"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/pods/{id}": {
+            "get": {
+                "description": "Get detailed information about a specific pod",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pods"
+                ],
+                "summary": "Get pod details",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pod ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.swaggerPodStatus"
+                        }
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update an existing pod",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pods"
+                ],
+                "summary": "Update pod",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pod ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated pod specification",
+                        "name": "pod",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.swaggerPodSpec"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.swaggerPodStatus"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a specific pod",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pods"
+                ],
+                "summary": "Delete pod",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pod ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/pods/{id}/logs": {
+            "get": {
+                "description": "Get logs from all containers in a pod",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pods"
+                ],
+                "summary": "Get pod logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pod ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "api.swaggerContainerConfig": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "description": "Command to run",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "description": "Environment variables",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "image": {
+                    "description": "Container image",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Container name",
+                    "type": "string"
+                }
+            }
+        },
+        "api.swaggerContainerStatus": {
+            "type": "object",
+            "properties": {
+                "createdAt": {
+                    "description": "Container created timestamp",
+                    "type": "string"
+                },
+                "error": {
+                    "description": "Error message if any",
+                    "type": "string"
+                },
+                "exitCode": {
+                    "description": "Exit code if terminated",
+                    "type": "integer"
+                },
+                "finishedAt": {
+                    "description": "Container finished timestamp",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Container ID",
+                    "type": "string"
+                },
+                "image": {
+                    "description": "Container image",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Container name",
+                    "type": "string"
+                },
+                "startedAt": {
+                    "description": "Container started timestamp",
+                    "type": "string"
+                },
+                "state": {
+                    "description": "Container state",
+                    "type": "string"
+                }
+            }
+        },
+        "api.swaggerPodDNSConfig": {
+            "type": "object",
+            "properties": {
+                "nameservers": {
+                    "description": "DNS nameservers",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "options": {
+                    "description": "DNS options",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "searches": {
+                    "description": "DNS search domains",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "api.swaggerPodNetworkConfig": {
+            "type": "object",
+            "properties": {
+                "dns": {
+                    "description": "DNS configuration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.swaggerPodDNSConfig"
+                        }
+                    ]
+                },
+                "hostNetwork": {
+                    "description": "Use host network",
+                    "type": "boolean"
+                },
+                "ports": {
+                    "description": "Port mappings",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.swaggerPortMapping"
+                    }
+                }
+            }
+        },
+        "api.swaggerPodSpec": {
+            "type": "object",
+            "properties": {
+                "containers": {
+                    "description": "List of containers in the pod",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.swaggerContainerConfig"
+                    }
+                },
+                "environment": {
+                    "description": "Pod-wide environment variables",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "description": "Unique identifier for the pod",
+                    "type": "string"
+                },
+                "labels": {
+                    "description": "Labels for pod metadata",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "description": "Human-readable name for the pod",
+                    "type": "string"
+                },
+                "network": {
+                    "description": "Network configuration",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.swaggerPodNetworkConfig"
+                        }
+                    ]
+                },
+                "resources": {
+                    "description": "Resource requirements/limits for the entire pod",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.swaggerResources"
+                        }
+                    ]
+                },
+                "restartPolicy": {
+                    "description": "Restart policy for containers in the pod",
+                    "type": "string"
+                },
+                "volumes": {
+                    "description": "Volume mounts shared across containers",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.swaggerPodVolume"
+                    }
+                }
+            }
+        },
+        "api.swaggerPodStatus": {
+            "type": "object",
+            "properties": {
+                "containerStatuses": {
+                    "description": "Container statuses",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.swaggerContainerStatus"
+                    }
+                },
+                "createdAt": {
+                    "description": "Important timestamps",
+                    "type": "string"
+                },
+                "finishedAt": {
+                    "type": "string"
+                },
+                "ip": {
+                    "description": "Pod IP address",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "Detailed status message",
+                    "type": "string"
+                },
+                "phase": {
+                    "description": "Current phase of the pod",
+                    "type": "string"
+                },
+                "spec": {
+                    "description": "Pod specification",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.swaggerPodSpec"
+                        }
+                    ]
+                },
+                "startedAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.swaggerPodVolume": {
+            "type": "object",
+            "properties": {
+                "hostPath": {
+                    "description": "Host path",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Volume name",
+                    "type": "string"
+                }
+            }
+        },
+        "api.swaggerPortMapping": {
+            "type": "object",
+            "properties": {
+                "containerPort": {
+                    "description": "Container port",
+                    "type": "integer"
+                },
+                "hostPort": {
+                    "description": "Host port",
+                    "type": "integer"
+                },
+                "name": {
+                    "description": "Port mapping name",
+                    "type": "string"
+                },
+                "protocol": {
+                    "description": "Protocol (tcp/udp)",
+                    "type": "string"
+                }
+            }
+        },
+        "api.swaggerResources": {
+            "type": "object",
+            "properties": {
+                "cpu": {
+                    "description": "CPU limit in cores",
+                    "type": "number"
+                },
+                "memory": {
+                    "description": "Memory limit in bytes",
+                    "type": "integer"
+                }
+            }
+        }
+    }
+}
