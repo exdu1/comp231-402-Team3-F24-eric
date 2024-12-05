@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<nav>
+    <ul>
+        <li><a href="/dashboard">Dashboard</a></li>
+    </ul>
+</nav>
+<main>
+    <h1>Dashboard</h1>
+    <button onclick="location.href='/createPod'">Create Pod</button>
+    <table>
+        <tr>
+            <th>Pod Name</th>
+            <th>Pod Phase</th>
+            <th>Actions</th>
+        </tr>
+        {{ range .Pods }}
+        <tr>
+            <td><a href="/pod/{{ .ID }}">{{ .Name }}</a></td>
+            <td>{{ .Phase }}</td>
+            <td><button onclick="deletePod('{{ .ID }}')">Delete</button></td>
+            <!-- TODO: Check if delete works -->
+        </tr>
+        {{ end }}
+    </table>
+</main>
+</body>
+</html>
