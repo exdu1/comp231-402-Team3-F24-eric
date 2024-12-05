@@ -88,6 +88,21 @@ This will provide you with interactive API documentation where you can:
 - See request/response schemas
 - Download the OpenAPI specification
 
+### LitePod UI
+ **Access LitePod Dashboard**:
+Open your web browser and navigate to:
+```
+http://localhost:8080/dashboard
+```
+From here:
+- Create a Pod
+- View existing Pods
+
+#### General URL Formats
+Pod URL format ``http://localhost:8080/pod/POD_ID``
+
+Container URL format ``http://localhost:8080/pod/POD_ID/container/CONTAINER_ID``
+
 ### Running Tests
 
 ```bash
