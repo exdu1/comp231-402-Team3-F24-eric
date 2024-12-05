@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <title>Create Container</title>
-    <link rel="stylesheet" href="../static/styles.css">
-    <script src="../../scripts/podScripts.js" defer></script>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/scripts/podScripts.js" defer></script>
 </head>
 <body>
 <nav>
     <ul>
         <li><a href="/dashboard">Dashboard</a></li>
-        <li><a href="/podName">{{ .PodName }}</a></li>
     </ul>
 </nav>
 <main>
   <h1>Create Pod</h1>
-  <form id="podForm" action="/createPod" method="post">
+  <form id="podForm" action="/api/pods" method="post">
       <table>
           <tr>
               <td><label for="podID">Pod ID:</label></td>

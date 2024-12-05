@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"strings"
@@ -172,7 +173,94 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 		httpSwagger.URL("/swagger/doc.json"), // The URL pointing to API definition
 	))
 
-	return mux
+    // Serve static files
+    mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+
+    // Serve HTML templates
+    mux.HandleFunc("/dashboard", s.renderTemplate("dashboard.html"))
+    mux.HandleFunc("/createPod", s.renderTemplate("podForm.html"))
+    mux.HandleFunc("/createContainer", s.renderTemplate("containerForm.html"))
+    mux.HandleFunc("/pod/", s.renderTemplate("pod.html"))
+    mux.HandleFunc("/container/", s.renderTemplate("container.html"))
+
+    return mux
+}
+
+// renderTemplate returns a handler function that renders the specified template
+func (s *Server) renderTemplate(templateName string) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        tmpl, err := template.ParseFiles("web/templates/" + templateName)
+        if (err != nil) {
+            http.Error(w, fmt.Sprintf("Error parsing template: %v", err), http.StatusInternalServerError)
+            return
+        }
+
+        var data interface{}
+        switch templateName {
+        case "dashboard.html":
+            data = s.getDashboardData(r)
+        case "pod.html":
+            data = s.getPodData(r)
+        case "container.html":
+            data = s.getContainerData(r)
+        }
+
+        if err := tmpl.Execute(w, data); err != nil {
+            http.Error(w, fmt.Sprintf("Error executing template: %v", err), http.StatusInternalServerError)
+        }
+    }
+}
+
+func (s *Server) getDashboardData(r *http.Request) interface{} {
+    pods, err := s.podManager.ListPods(r.Context())
+    if err != nil {
+        log.Printf("Error listing pods: %v", err)
+        return nil
+    }
+    return struct {
+        Pods []types.PodStatus
+    }{Pods: pods}
+}
+
+func (s *Server) getPodData(r *http.Request) interface{} {
+    podID := strings.TrimPrefix(r.URL.Path, "/pod/")
+    pod, err := s.podManager.GetPod(r.Context(), podID)
+    if err != nil {
+        log.Printf("Error getting pod: %v", err)
+        return nil
+    }
+    return pod
+}
+
+func (s *Server) getContainerData(r *http.Request) interface{} {
+    containerID := strings.TrimPrefix(r.URL.Path, "/container/")
+    pods, err := s.podManager.ListPods(r.Context())
+    if err != nil {
+        log.Printf("Error listing pods: %v", err)
+        return nil
+    }
+    for _, pod := range pods {
+        for _, container := range pod.Spec.Containers {
+            if container.ID == containerID {
+				return struct {
+					PodID         string
+					PodName       string
+					ContainerID   string
+					ContainerName string
+					Image 	      string
+					Environment   map[string]string
+				}{
+					PodID:         pod.Spec.ID,
+					PodName:       pod.Spec.Name,
+					ContainerID:   container.ID,
+					ContainerName: container.Name,
+					Image:        container.Image,
+					Environment:   container.Environment,
+				}
+            }
+        }
+    }
+    return nil
 }
 
 // @Summary      List all pods
