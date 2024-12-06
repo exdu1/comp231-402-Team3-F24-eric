@@ -2,6 +2,7 @@ package pod
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 
 const (
 	testPodID       = "test-pod-1"
-	testContainerID = "test-container-1"
+	testContainerID = "test-pod-1-test-container"
 )
 
 // Helper function to create a test pod spec
@@ -21,7 +22,7 @@ func createTestPod(id string) types.PodSpec {
 		Name: "test-pod",
 		Containers: []types.ContainerConfig{
 			{
-				ID:    "test-container-1",
+				ID:    fmt.Sprintf("%s-%s", id, "test-container"),
 				Name:  "test-container",
 				Image: "test-image",
 			},
@@ -171,9 +172,9 @@ func TestStartStopPod(t *testing.T) {
 
 	t.Run("container_missing_in_list", func(t *testing.T) {
 		manager, runtime := createTestPodManager(t)
-		runtime.skipContainerID = "test-container-1"
-
 		pod := createTestPod("test-pod-1")
+		runtime.skipContainerID = fmt.Sprintf("%s-%s", pod.ID, "test-container")
+
 		_, err := manager.CreatePod(context.Background(), pod)
 		require.NoError(t, err)
 
