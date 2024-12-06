@@ -91,7 +91,7 @@ func (s *IntegrationTestSuite) createTestPod(name string) (*types.PodSpec, error
 		Name: name,
 		Containers: []types.ContainerConfig{
 			{
-				ID:    fmt.Sprintf("test-container-%d", time.Now().UnixNano()),
+				ID:    fmt.Sprintf("%s-%s", podID, "test-container"),
 				Name:  "test-container",
 				Image: testImage,
 				Command: []string{
@@ -139,7 +139,7 @@ func TestPodLifecycle_Integration(t *testing.T) {
 			Name: "lifecycle-test",
 			Containers: []types.ContainerConfig{
 				{
-					ID:    fmt.Sprintf("test-container-1-%d", time.Now().UnixNano()),
+					ID:    fmt.Sprintf("%s-%s", podID, "test-container-1"),
 					Name:  "test-container-1",
 					Image: testImage,
 					Command: []string{
@@ -149,7 +149,7 @@ func TestPodLifecycle_Integration(t *testing.T) {
 					},
 				},
 				{
-					ID:    fmt.Sprintf("test-container-2-%d", time.Now().UnixNano()),
+					ID:    fmt.Sprintf("%s-%s", podID, "test-container-2"),
 					Name:  "test-container-2",
 					Image: testImage,
 					Command: []string{
@@ -360,7 +360,7 @@ func TestPodUpdate_Integration(t *testing.T) {
 		t.Log("Creating updated pod specification")
 		updatedSpec := *spec
 		updatedSpec.Containers = append(updatedSpec.Containers, types.ContainerConfig{
-			ID:    fmt.Sprintf("test-container-2-%d", time.Now().UnixNano()),
+			ID:    fmt.Sprintf("%s-%s", spec.ID, "test-container-2"),
 			Name:  "test-container-2",
 			Image: testImage,
 			Command: []string{
@@ -404,14 +404,39 @@ func TestPodWatch_Integration(t *testing.T) {
 	defer cleanup()
 
 	t.Run("watch pod status changes", func(t *testing.T) {
-		// Create a test pod
-		spec, err := suite.createTestPod("watch-test")
-		require.NoError(t, err)
+		// Create pod spec
+		podID := fmt.Sprintf("watch-test-%d", time.Now().UnixNano())
+		spec := &types.PodSpec{
+			ID:   podID,
+			Name: "watch-test",
+			Containers: []types.ContainerConfig{
+				{
+					ID:    fmt.Sprintf("%s-%s", podID, "test-container"),
+					Name:  "test-container",
+					Image: testImage,
+					Command: []string{
+						"sh",
+						"-c",
+						"while true; do echo 'test container running'; sleep 1; done",
+					},
+				},
+			},
+		}
 
-		// Set up watch before creating pod
+		// Track the pod for cleanup
+		suite.cleanup.TrackPod(podID)
+
+		// Create context for operations
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
+		// Create the pod first
+		t.Log("Creating pod")
+		status, err := suite.podManager.CreatePod(ctx, *spec)
+		require.NoError(t, err, "Failed to create pod")
+		require.NotNil(t, status, "Pod status should not be nil")
+
+		// Set up watch after creating pod
 		watchChan, err := suite.podManager.WatchPod(ctx, spec.ID)
 		require.NoError(t, err)
 

@@ -100,6 +100,9 @@ func (pm *podManager) CreatePod(ctx context.Context, spec types.PodSpec) (*types
 func (pm *podManager) createPodContainers(ctx context.Context, spec types.PodSpec) error {
 	var errs []error
 	for _, container := range spec.Containers {
+		// Set container ID based on pod ID and container name
+		container.ID = fmt.Sprintf("%s-%s", spec.ID, container.Name)
+
 		// Merge pod-level environment variables
 		mergedEnv := make(map[string]string)
 		for k, v := range spec.Environment {
