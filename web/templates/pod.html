@@ -1,0 +1,35 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pod - {{ .PodName }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<nav>
+    <ul>
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li><a href="/pod/{{ .PodID }}">{{ .PodName }}</a></li>
+    </ul>
+</nav>
+<main>
+    <h1>Pod - {{ .PodName }}</h1>
+    <table>
+        <tr>
+            <th>Container Name</th>
+            <th>State</th>
+            <th>Actions</th>
+        </tr>
+        {{ range .Containers }}
+        <tr>
+            <td><a href="/container/{{ .ID }}">{{ .Name }}</a></td>
+            <td>{{ .State }}</td>
+            <td><button onclick="deleteContainer('{{ .ID }}')">Delete</button></td> 
+            <!-- TODO: Check if delete actually works -->
+        </tr>
+        {{ end }}
+    </table>
+</main>
+</body>
+</html>
