@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Dashboard</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/scripts/podScripts.js" defer></script>
 </head>
 <body>
 <nav>
@@ -22,10 +23,9 @@
         </tr>
         {{ range .Pods }}
         <tr>
-            <td><a href="/pod/{{ .ID }}">{{ .Name }}</a></td>
+            <td><a href="/pod/{{ .Spec.ID }}">{{ .Spec.Name }}</a></td>
             <td>{{ .Phase }}</td>
-            <td><button onclick="deletePod('{{ .ID }}')">Delete</button></td>
-            <!-- TODO: Check if delete works -->
+            <td><button onclick="deletePod('{{ .Spec.ID }}')">Delete</button></td>
         </tr>
         {{ end }}
     </table>

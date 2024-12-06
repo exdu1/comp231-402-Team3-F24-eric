@@ -18,27 +18,48 @@
       <table>
           <tr>
               <td><label for="podID">Pod ID:</label></td>
-              <td><input type="text" id="podID" name="podID" required></td>
+              <td><input type="text" id="podID" name="id" required></td>
           </tr>
           <tr>
               <td><label for="podName">Pod Name:</label></td>
-              <td><input type="text" id="podName" name="podName" required></td>
+              <td><input type="text" id="podName" name="name" required></td>
           </tr>
           <tr>
               <td><label for="cpuShares">CPU Shares:</label></td>
-              <td><input type="number" id="cpuShares" name="cpuShares" required></td>
+              <td><input type="number" id="cpuShares" name="resources[cpu]" required></td>
           </tr>
           <tr>
               <td><label for="memoryMB">Memory (MB):</label></td>
-              <td><input type="number" id="memoryMB" name="memoryMB" required></td>
+              <td><input type="number" id="memoryMB" name="resources[memory]" required></td>
           </tr>
           <tr>
               <td><label for="networkConfig">Network Configuration:</label></td>
-              <td><input type="text" id="networkConfig" name="networkConfig"></td>
+              <td>
+                  <input type="checkbox" id="hostNetwork" name="network[hostNetwork]"> Host Network<br>
+                  <input type="text" name="network[dns][nameservers][]" placeholder="DNS Nameserver">
+                  <input type="text" name="network[dns][searches][]" placeholder="DNS Search">
+                  <input type="text" name="network[dns][options][]" placeholder="DNS Option">
+              </td>
+          </tr>
+          <tr>
+              <td><label for="ports">Ports:</label></td>
+              <td>
+                  <div class="port-entry">
+                      <input type="number" name="network[ports][0][hostPort]" placeholder="Host Port">
+                      <input type="number" name="network[ports][0][containerPort]" placeholder="Container Port">
+                      <input type="text" name="network[ports][0][name]" placeholder="Name">
+                      <input type="text" name="network[ports][0][protocol]" placeholder="Protocol">
+                  </div>
+              </td>
           </tr>
           <tr>
               <td><label for="volumes">Volumes:</label></td>
-              <td><input type="text" id="volumes" name="volumes"></td>
+              <td>
+                  <div class="volume-entry">
+                      <input type="text" name="volumes[0][name]" placeholder="Volume Name">
+                      <input type="text" name="volumes[0][hostPath]" placeholder="Host Path">
+                  </div>
+              </td>
           </tr>
           <tr>
               <td><label for="environment">Environment Variables:</label></td>
@@ -58,9 +79,37 @@
           </tr>
           <tr>
               <td><label for="labels">Labels:</label></td>
-              <td><input type="text" id="labels" name="labels"></td>
+              <td>
+                  <div class="label-entry">
+                      <input type="text" name="label_key[]" placeholder="KEY">
+                      <input type="text" name="label_value[]" placeholder="VALUE">
+                      <button type="button" class="add-label">+</button>
+                  </div>
+              </td>
+          </tr>
+          <tr>
+              <td><label for="containers">Containers:</label></td>
+              <td>
+                  <div id="containers">
+                      <div class="container-entry">
+                          <input type="text" name="containers[0][name]" placeholder="Container Name">
+                          <input type="text" name="containers[0][image]" placeholder="Image">
+                          <input type="text" name="containers[0][command][]" placeholder="Command">
+                          <div class="container-env-vars">
+                              <div class="container-env-var-entry">
+                                  <input type="text" name="containers[0][env_key][]" placeholder="Env KEY">
+                                  <input type="text" name="containers[0][env_value][]" placeholder="Env VALUE">
+                                  <button type="button" class="add-container-env-var">+</button>
+                              </div>
+                          </div>
+                          <button type="button" class="add-container">+</button>
+                      </div>
+                  </div>
+              </td>
           </tr>
       </table>
       <button type="submit">Create Pod</button>
   </form>
-  </main> 
+</main>
+</body>
+</html>
