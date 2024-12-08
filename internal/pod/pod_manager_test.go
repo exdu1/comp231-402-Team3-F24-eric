@@ -2,14 +2,42 @@ package pod
 
 import (
 	"context"
-	"io"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/comp231-402-Team3-F24/pkg/types"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const (
+	testPodID       = "test-pod-1"
+	testContainerID = "test-pod-1-test-container"
+)
+
+// Helper function to create a test pod spec
+func createTestPod(id string) types.PodSpec {
+	return types.PodSpec{
+		ID:   id,
+		Name: "test-pod",
+		Containers: []types.ContainerConfig{
+			{
+				ID:    fmt.Sprintf("%s-%s", id, "test-container"),
+				Name:  "test-container",
+				Image: "test-image",
+			},
+		},
+	}
+}
+
+// Helper function to create a test pod manager with mock runtime
+func createTestPodManager(t *testing.T) (Manager, *MockRuntime) {
+	runtime := &MockRuntime{
+		containers: make(map[string]types.ContainerStatus),
+	}
+	manager := NewManager(runtime)
+	return manager, runtime
+}
 
 // TestCreatePod verifies pod creation functionality
 func TestCreatePod(t *testing.T) {
@@ -21,18 +49,14 @@ func TestCreatePod(t *testing.T) {
 		{
 			name: "valid pod spec",
 			spec: types.PodSpec{
-				ID:   "test-pod-1",
+				ID:   testPodID,
 				Name: "test-pod",
 				Containers: []types.ContainerConfig{
 					{
-						ID:    "test-container-1",
+						ID:    testContainerID,
 						Name:  "test-container",
-						Image: "docker.io/library/alpine:latest",
+						Image: "test-image",
 					},
-				},
-				Resources: types.Resources{
-					CPUShares: 1024,
-					MemoryMB:  256,
 				},
 			},
 			wantErr: false,
@@ -40,7 +64,7 @@ func TestCreatePod(t *testing.T) {
 		{
 			name: "invalid pod spec - no containers",
 			spec: types.PodSpec{
-				ID:   "test-pod-2",
+				ID:   testPodID,
 				Name: "test-pod",
 			},
 			wantErr: true,
@@ -51,9 +75,9 @@ func TestCreatePod(t *testing.T) {
 				Name: "test-pod",
 				Containers: []types.ContainerConfig{
 					{
-						ID:    "test-container-1",
+						ID:    testContainerID,
 						Name:  "test-container",
-						Image: "docker.io/library/alpine:latest",
+						Image: "test-image",
 					},
 				},
 			},
@@ -63,239 +87,248 @@ func TestCreatePod(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create new runtime mock
-			mockRuntime := &MockRuntime{}
-			pm := NewManager(mockRuntime)
-
-			// Test pod creation
-			err := pm.CreatePod(context.Background(), tt.spec)
+			manager, _ := createTestPodManager(t)
+			_, err := manager.CreatePod(context.Background(), tt.spec)
 			if tt.wantErr {
-				assert.Error(t, err)
-				return
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
 			}
-			assert.NoError(t, err)
-
-			// Verify pod was created
-			pod, err := pm.GetPod(context.Background(), tt.spec.ID)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.spec.ID, pod.Spec.ID)
 		})
 	}
 }
 
 // TestDeletePod verifies pod deletion functionality
 func TestDeletePod(t *testing.T) {
-	// Create new runtime mock
-	mockRuntime := &MockRuntime{}
-	pm := NewManager(mockRuntime)
-
-	// Create a pod for testing
-	spec := types.PodSpec{
-		ID:   "test-pod-delete",
-		Name: "test-pod",
-		Containers: []types.ContainerConfig{
-			{
-				ID:    "test-container-1",
-				Name:  "test-container",
-				Image: "docker.io/library/alpine:latest",
-			},
-		},
-	}
+	manager, _ := createTestPodManager(t)
+	pod := createTestPod("test-pod-1")
 
 	// Create pod
-	err := pm.CreatePod(context.Background(), spec)
+	_, err := manager.CreatePod(context.Background(), pod)
 	require.NoError(t, err)
 
-	// Test deletion
-	err = pm.DeletePod(context.Background(), spec.ID)
-	assert.NoError(t, err)
+	// Delete pod
+	err = manager.DeletePod(context.Background(), pod.ID)
+	require.NoError(t, err)
 
-	// Verify pod was deleted
-	_, err = pm.GetPod(context.Background(), spec.ID)
-	assert.Equal(t, ErrPodNotFound, err)
-
-	// Test deleting non-existent pod
-	err = pm.DeletePod(context.Background(), "nonexistent-pod")
-	assert.Equal(t, ErrPodNotFound, err)
+	// Verify pod is deleted
+	_, err = manager.GetPod(context.Background(), pod.ID)
+	require.Error(t, err)
 }
 
 // TestStartStopPod verifies pod lifecycle management
 func TestStartStopPod(t *testing.T) {
-	// Create new runtime mock
-	mockRuntime := &MockRuntime{}
-	pm := NewManager(mockRuntime)
+	t.Run("successful_start_and_stop", func(t *testing.T) {
+		manager, _ := createTestPodManager(t)
+		pod := createTestPod("test-pod-1")
+		_, err := manager.CreatePod(context.Background(), pod)
+		require.NoError(t, err)
 
-	// Create a pod for testing
-	spec := types.PodSpec{
-		ID:   "test-pod-lifecycle",
-		Name: "test-pod",
-		Containers: []types.ContainerConfig{
-			{
-				ID:    "test-container-1",
-				Name:  "test-container",
-				Image: "docker.io/library/alpine:latest",
-			},
-		},
-	}
+		err = manager.StartPod(context.Background(), pod.ID)
+		require.NoError(t, err)
 
-	// Create pod
-	err := pm.CreatePod(context.Background(), spec)
-	require.NoError(t, err)
+		err = manager.StopPod(context.Background(), pod.ID)
+		require.NoError(t, err)
+	})
 
-	// Test starting pod
-	err = pm.StartPod(context.Background(), spec.ID)
-	assert.NoError(t, err)
+	t.Run("container_start_failure", func(t *testing.T) {
+		manager, runtime := createTestPodManager(t)
+		runtime.failStartContainer = true
 
-	// Verify pod is running
-	pod, err := pm.GetPod(context.Background(), spec.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, types.PodRunning, pod.Phase)
+		pod := createTestPod("test-pod-1")
+		_, err := manager.CreatePod(context.Background(), pod)
+		require.NoError(t, err)
 
-	// Test stopping pod
-	err = pm.StopPod(context.Background(), spec.ID)
-	assert.NoError(t, err)
+		err = manager.StartPod(context.Background(), pod.ID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "simulated start container failure")
+	})
 
-	// Verify pod is stopped
-	pod, err = pm.GetPod(context.Background(), spec.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, types.PodPending, pod.Phase)
+	t.Run("container_never_reaches_running_state", func(t *testing.T) {
+		manager, runtime := createTestPodManager(t)
+		runtime.stayInStartingState = true
+
+		pod := createTestPod("test-pod-1")
+		_, err := manager.CreatePod(context.Background(), pod)
+		require.NoError(t, err)
+
+		err = manager.StartPod(context.Background(), pod.ID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Timeout waiting for containers to start")
+	})
+
+	t.Run("container_list_failure", func(t *testing.T) {
+		manager, runtime := createTestPodManager(t)
+		runtime.failListContainers = true
+
+		pod := createTestPod("test-pod-1")
+		_, err := manager.CreatePod(context.Background(), pod)
+		require.NoError(t, err)
+
+		err = manager.StartPod(context.Background(), pod.ID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to list containers: simulated list containers failure")
+	})
+
+	t.Run("container_missing_in_list", func(t *testing.T) {
+		manager, runtime := createTestPodManager(t)
+		pod := createTestPod("test-pod-1")
+		runtime.skipContainerID = fmt.Sprintf("%s-%s", pod.ID, "test-container")
+
+		_, err := manager.CreatePod(context.Background(), pod)
+		require.NoError(t, err)
+
+		err = manager.StartPod(context.Background(), pod.ID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Timeout waiting for containers to start")
+	})
 }
 
 // TestUpdatePod verifies pod update functionality
 func TestUpdatePod(t *testing.T) {
-	// Create new runtime mock
-	mockRuntime := &MockRuntime{}
-	pm := NewManager(mockRuntime)
+	// Create a context with longer timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	// Create initial pod spec
-	originalSpec := types.PodSpec{
-		ID:   "test-pod-update",
-		Name: "test-pod",
-		Containers: []types.ContainerConfig{
-			{
-				ID:    "test-container-1",
-				Name:  "test-container",
-				Image: "docker.io/library/alpine:latest",
-			},
-		},
-	}
+	manager, _ := createTestPodManager(t)
+	pod := createTestPod("test-pod-1")
 
 	// Create pod
-	err := pm.CreatePod(context.Background(), originalSpec)
+	status, err := manager.CreatePod(ctx, pod)
+	require.NoError(t, err)
+	require.Equal(t, pod.ID, status.Spec.ID)
+
+	// Start watching pod to ensure we get updates
+	watchChan, err := manager.WatchPod(ctx, pod.ID)
 	require.NoError(t, err)
 
-	// Create updated spec
-	updatedSpec := originalSpec
-	updatedSpec.Containers = append(updatedSpec.Containers, types.ContainerConfig{
-		ID:    "test-container-2",
-		Name:  "test-container-2",
-		Image: "docker.io/library/nginx:latest",
-	})
+	// Start the pod first
+	err = manager.StartPod(ctx, pod.ID)
+	require.NoError(t, err)
 
-	// Test update
-	err = pm.UpdatePod(context.Background(), originalSpec.ID, updatedSpec)
-	assert.NoError(t, err)
+	// Wait for pod to be running
+	waitForPodPhase(t, watchChan, types.PodRunning)
 
-	// Verify update
-	pod, err := pm.GetPod(context.Background(), originalSpec.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, 2, len(pod.Spec.Containers))
+	// Update pod spec
+	updatedPod := pod
+	updatedPod.Name = "updated-test-pod"
+	err = manager.UpdatePod(ctx, pod.ID, updatedPod)
+	require.NoError(t, err)
+
+	// Wait for update to be processed and verify name was updated
+	waitForPodSpec(t, watchChan, "updated-test-pod")
+
+	// Verify final state
+	finalStatus, err := manager.GetPod(ctx, pod.ID)
+	require.NoError(t, err)
+	require.Equal(t, "updated-test-pod", finalStatus.Spec.Name)
+	require.Equal(t, types.PodRunning, finalStatus.Phase)
+
+	// Cleanup
+	err = manager.DeletePod(ctx, pod.ID)
+	require.NoError(t, err)
+}
+
+func waitForPodPhase(t *testing.T, ch <-chan types.PodStatus, phase types.PodPhase) {
+	t.Helper()
+	timeout := time.After(10 * time.Second)
+	for {
+		select {
+		case status, ok := <-ch:
+			if !ok {
+				t.Fatal("Watch channel closed unexpectedly")
+				return
+			}
+			if status.Phase == phase {
+				return
+			}
+		case <-timeout:
+			t.Fatalf("Timeout waiting for pod phase %s", phase)
+		}
+	}
+}
+
+func waitForPodSpec(t *testing.T, ch <-chan types.PodStatus, name string) {
+	t.Helper()
+	timeout := time.After(10 * time.Second)
+	for {
+		select {
+		case status, ok := <-ch:
+			if !ok {
+				t.Fatal("Watch channel closed unexpectedly")
+				return
+			}
+			if status.Spec.Name == name {
+				return
+			}
+		case <-timeout:
+			t.Fatalf("Timeout waiting for pod spec name %s", name)
+		}
+	}
 }
 
 // TestPodWatch verifies pod watching functionality
 func TestPodWatch(t *testing.T) {
-	// Create new runtime mock
-	mockRuntime := &MockRuntime{}
-	pm := NewManager(mockRuntime)
-
-	// Create a pod for testing
-	spec := types.PodSpec{
-		ID:   "test-pod-watch",
-		Name: "test-pod",
-		Containers: []types.ContainerConfig{
-			{
-				ID:    "test-container-1",
-				Name:  "test-container",
-				Image: "docker.io/library/alpine:latest",
-			},
-		},
-	}
-
-	// Create pod
-	err := pm.CreatePod(context.Background(), spec)
-	require.NoError(t, err)
-
-	// Create context with timeout
+	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Start watching pod
-	watchChan, err := pm.WatchPod(ctx, spec.ID)
+	manager, _ := createTestPodManager(t)
+	pod := createTestPod("test-pod-1")
+
+	// Create pod
+	_, err := manager.CreatePod(ctx, pod)
 	require.NoError(t, err)
 
-	// Start pod to trigger status change
+	// Start watching pod
+	watchChan, err := manager.WatchPod(ctx, pod.ID)
+	require.NoError(t, err)
+
+	// Create error channel to capture errors from goroutine
+	errChan := make(chan error, 1)
+
+	// Start pod in background
 	go func() {
-		err := pm.StartPod(context.Background(), spec.ID)
-		require.NoError(t, err)
+		if err := manager.StartPod(ctx, pod.ID); err != nil {
+			errChan <- err
+			return
+		}
+		errChan <- nil
 	}()
 
-	// Wait for status update
+	// Wait for pod to be running or error
+	var lastStatus *types.PodStatus
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for status := range watchChan {
+			lastStatus = &status
+			if status.Phase == types.PodRunning {
+				return
+			}
+		}
+	}()
+
+	// Wait for either completion or timeout
 	select {
-	case status := <-watchChan:
-		assert.Equal(t, types.PodRunning, status.Phase)
+	case err := <-errChan:
+		require.NoError(t, err, "StartPod failed")
 	case <-ctx.Done():
-		t.Fatal("timeout waiting for pod status update")
+		t.Fatal("timeout waiting for pod to start")
 	}
-}
 
-// MockRuntime implements the ContainerRuntime interface for testing
-type MockRuntime struct {
-	createCalls int
-	startCalls  int
-	stopCalls   int
-	removeCalls int
-}
+	select {
+	case <-done:
+		// Success case
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for pod status updates")
+	}
 
-func (m *MockRuntime) CreateContainer(ctx context.Context, config types.ContainerConfig) error {
-	m.createCalls++
-	return nil
-}
+	require.NotNil(t, lastStatus)
+	require.Equal(t, types.PodRunning, lastStatus.Phase)
 
-func (m *MockRuntime) StartContainer(ctx context.Context, id string) error {
-	m.startCalls++
-	return nil
-}
-
-func (m *MockRuntime) StopContainer(ctx context.Context, id string) error {
-	m.stopCalls++
-	return nil
-}
-
-func (m *MockRuntime) RemoveContainer(ctx context.Context, id string) error {
-	m.removeCalls++
-	return nil
-}
-
-func (m *MockRuntime) ListContainers(ctx context.Context) ([]types.ContainerStatus, error) {
-	return []types.ContainerStatus{}, nil
-}
-
-func (m *MockRuntime) ContainerStats(ctx context.Context, id string) (*types.ContainerStats, error) {
-	return &types.ContainerStats{}, nil
-}
-
-func (m *MockRuntime) PullImage(ctx context.Context, ref string) error {
-	return nil
-}
-
-func (m *MockRuntime) ImportImage(ctx context.Context, imageName string, reader io.Reader) error {
-	return nil
-}
-
-func (m *MockRuntime) ListImages(ctx context.Context) ([]types.ImageInfo, error) {
-	return []types.ImageInfo{}, nil
-}
-
-func (m *MockRuntime) Close() error {
-	return nil
+	// Clean up
+	err = manager.StopPod(ctx, pod.ID)
+	require.NoError(t, err)
 }

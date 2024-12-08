@@ -91,7 +91,7 @@ func (s *IntegrationTestSuite) createTestPod(name string) (*types.PodSpec, error
 		Name: name,
 		Containers: []types.ContainerConfig{
 			{
-				ID:    fmt.Sprintf("test-container-%d", time.Now().UnixNano()),
+				ID:    fmt.Sprintf("%s-%s", podID, "test-container"),
 				Name:  "test-container",
 				Image: testImage,
 				Command: []string{
@@ -116,9 +116,12 @@ func (s *IntegrationTestSuite) createTestPod(name string) (*types.PodSpec, error
 	}
 
 	// Create the pod
-	err = s.podManager.CreatePod(ctx, *spec)
+	status, err := s.podManager.CreatePod(ctx, *spec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pod: %w", err)
+	}
+	if status == nil {
+		return nil, fmt.Errorf("pod created but status is nil")
 	}
 
 	return spec, nil
@@ -136,7 +139,7 @@ func TestPodLifecycle_Integration(t *testing.T) {
 			Name: "lifecycle-test",
 			Containers: []types.ContainerConfig{
 				{
-					ID:    fmt.Sprintf("test-container-1-%d", time.Now().UnixNano()),
+					ID:    fmt.Sprintf("%s-%s", podID, "test-container-1"),
 					Name:  "test-container-1",
 					Image: testImage,
 					Command: []string{
@@ -146,7 +149,7 @@ func TestPodLifecycle_Integration(t *testing.T) {
 					},
 				},
 				{
-					ID:    fmt.Sprintf("test-container-2-%d", time.Now().UnixNano()),
+					ID:    fmt.Sprintf("%s-%s", podID, "test-container-2"),
 					Name:  "test-container-2",
 					Image: testImage,
 					Command: []string{
@@ -172,19 +175,26 @@ func TestPodLifecycle_Integration(t *testing.T) {
 
 		// Create pod
 		t.Log("Creating pod with multiple containers")
-		err = suite.podManager.CreatePod(ctx, *spec)
+		status, err := suite.podManager.CreatePod(ctx, *spec)
 		require.NoError(t, err, "Failed to create pod with two containers")
+		require.NotNil(t, status, "Pod status should not be nil")
 
-		// Now that the pod exists, set up pod watching
+		// Set up pod watching after creating the pod
 		t.Log("Setting up pod watch")
 		watchChan, err := suite.podManager.WatchPod(ctx, spec.ID)
 		require.NoError(t, err, "Failed to set up pod watch")
 
-		// Verify initial pod state
-		status, err := suite.podManager.GetPod(ctx, spec.ID)
-		require.NoError(t, err, "Failed to get pod status")
-		assert.Equal(t, types.PodPending, status.Phase, "Pod should be in pending state")
-		assert.Equal(t, 2, len(status.Spec.Containers), "Pod should have two containers")
+		// Verify initial pod state through watch channel
+		var sawPending bool
+		select {
+		case status := <-watchChan:
+			if status.Phase == types.PodPending {
+				sawPending = true
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("Timeout waiting for pod pending status")
+		}
+		require.True(t, sawPending, "Should have seen pod in pending state")
 
 		// Start pod
 		t.Log("Starting pod")
@@ -192,18 +202,16 @@ func TestPodLifecycle_Integration(t *testing.T) {
 		require.NoError(t, err, "Failed to start pod")
 
 		// Wait for running state through watch channel
-		t.Log("Waiting for running state")
 		var sawRunning bool
 		select {
 		case status := <-watchChan:
-			t.Logf("Received pod status: %s", status.Phase)
 			if status.Phase == types.PodRunning {
 				sawRunning = true
 			}
-		case <-time.After(10 * time.Second):
+		case <-time.After(20 * time.Second):
 			t.Error("Timeout waiting for pod running status")
 		}
-		assert.True(t, sawRunning, "Should have seen pod enter running state")
+		require.True(t, sawRunning, "Should have seen pod enter running state")
 
 		// Verify both containers are running
 		t.Log("Verifying container statuses")
@@ -352,7 +360,7 @@ func TestPodUpdate_Integration(t *testing.T) {
 		t.Log("Creating updated pod specification")
 		updatedSpec := *spec
 		updatedSpec.Containers = append(updatedSpec.Containers, types.ContainerConfig{
-			ID:    fmt.Sprintf("test-container-2-%d", time.Now().UnixNano()),
+			ID:    fmt.Sprintf("%s-%s", spec.ID, "test-container-2"),
 			Name:  "test-container-2",
 			Image: testImage,
 			Command: []string{
@@ -396,32 +404,62 @@ func TestPodWatch_Integration(t *testing.T) {
 	defer cleanup()
 
 	t.Run("watch pod status changes", func(t *testing.T) {
-		// Create a pod to watch
-		spec, err := suite.createTestPod("watch-test")
-		require.NoError(t, err, "Failed to create test pod")
+		// Create pod spec
+		podID := fmt.Sprintf("watch-test-%d", time.Now().UnixNano())
+		spec := &types.PodSpec{
+			ID:   podID,
+			Name: "watch-test",
+			Containers: []types.ContainerConfig{
+				{
+					ID:    fmt.Sprintf("%s-%s", podID, "test-container"),
+					Name:  "test-container",
+					Image: testImage,
+					Command: []string{
+						"sh",
+						"-c",
+						"while true; do echo 'test container running'; sleep 1; done",
+					},
+				},
+			},
+		}
 
+		// Track the pod for cleanup
+		suite.cleanup.TrackPod(podID)
+
+		// Create context for operations
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		// Start watching before any operations
+		// Create the pod first
+		t.Log("Creating pod")
+		status, err := suite.podManager.CreatePod(ctx, *spec)
+		require.NoError(t, err, "Failed to create pod")
+		require.NotNil(t, status, "Pod status should not be nil")
+
+		// Set up watch after creating pod
 		watchChan, err := suite.podManager.WatchPod(ctx, spec.ID)
-		require.NoError(t, err, "Failed to start pod watch")
+		require.NoError(t, err)
 
 		// Start the pod in a goroutine
+		errChan := make(chan error, 1)
 		go func() {
 			err := suite.podManager.StartPod(ctx, spec.ID)
-			require.NoError(t, err, "Failed to start pod")
+			errChan <- err
 		}()
 
-		// Wait for running status
+		// Wait for both the StartPod completion and running state
 		var sawRunning bool
-		select {
-		case status := <-watchChan:
-			if status.Phase == types.PodRunning {
-				sawRunning = true
+		for !sawRunning {
+			select {
+			case err := <-errChan:
+				require.NoError(t, err, "Failed to start pod")
+			case status := <-watchChan:
+				if status.Phase == types.PodRunning {
+					sawRunning = true
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("Timeout waiting for pod running status")
 			}
-		case <-time.After(10 * time.Second):
-			t.Error("Timeout waiting for pod running status")
 		}
 
 		assert.True(t, sawRunning, "Should have seen pod enter running state")

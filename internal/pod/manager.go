@@ -22,7 +22,7 @@ var (
 // Manager defines the interface for pod operations
 type Manager interface {
 	// CreatePod creates a new pod from the given specification
-	CreatePod(ctx context.Context, spec types.PodSpec) error
+	CreatePod(ctx context.Context, spec types.PodSpec) (*types.PodStatus, error)
 
 	// DeletePod removes a pod and all its resources
 	DeletePod(ctx context.Context, id string) error

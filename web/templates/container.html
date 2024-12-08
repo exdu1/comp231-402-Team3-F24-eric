@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Container - {{ .ContainerName }}</title> <!-- TODO: Fix hardcoding -->
-    <link rel="stylesheet" href="../static/styles.css"> <!-- TODO: Fix hardcoding -->
-    <script src="../../scripts/containerScripts.js"></script> <!-- TODO: Fix hardcoding -->
+    <title>Container - {{ .ContainerName }}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/scripts/containerScripts.js"></script>
 </head>
 <body>
 <nav>
     <ul>
         <li><a href="/dashboard">Dashboard</a></li>
-        <li><a href="/podName">{{ .PodName }}</a></li> <!-- TODO: Fix hardcoding -->
-        <li><a href="/container">{{ .ContainerName }}</a></li> <!-- TODO: Fix hardcoding -->
+        <li><a href="/pod/{{ .PodID }}">{{ .PodName }}</a></li>
+        <li><a href="/container/{{ .ContainerID }}">{{ .ContainerName }}</a></li>
     </ul>
 </nav>
 <main>
-    <h1>Container - {{ .ContainerName }}</h1> <!-- TODO: Fix hardcoding -->
+    <h1>Container - {{ .ContainerName }}</h1>
     <div>
         <button id="btnStartStop" onclick="toggleStartStopContainer()">Start/Stop Container</button>
         <button onclick="deleteContainer()">Delete Container</button>
@@ -23,12 +23,12 @@
     <table>
         <tr>
             <td>Image</td>
-            <td>{{ .Image }}</td> <!-- TODO: Fix hardcoding -->
+            <td>{{ .Image }}</td>
             <td class="tight"><Button onclick="editField(this)">Edit</Button></td>
         </tr>
         <tr>
             <td>Environment Variables</td>
-            <td>{{ .Environment }}</td> <!-- TODO: Fix hardcoding -->
+            <td>{{ .Environment }}</td>
             <td class="tight"><Button onclick="editField(this)">Edit</Button></td>
         </tr>
         <tr>
